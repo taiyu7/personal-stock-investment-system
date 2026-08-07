@@ -11,7 +11,13 @@ def format_number(value: float | None, digits: int = 2) -> str:
     return "N/A" if value is None or pd.isna(value) else f"{value:,.{digits}f}"
 
 
-def _recent_rows(history: pd.DataFrame, days: int = 5) -> pd.DataFrame:
+def format_delta(snapshot: QuoteSnapshot) -> str | None:
+    if snapshot.change is None or snapshot.change_percent is None:
+        return None
+    return f"{snapshot.change:+,.2f} ({snapshot.change_percent:+.2f}%)"
+
+
+def get_recent_trading_rows(history: pd.DataFrame, days: int = 5) -> pd.DataFrame:
     required = ["Open", "High", "Low", "Close"]
     if history.empty or any(column not in history for column in required):
         return pd.DataFrame()
@@ -25,10 +31,13 @@ def _recent_rows(history: pd.DataFrame, days: int = 5) -> pd.DataFrame:
         rows[target] = rows[source].astype(float)
     rows["漲跌"] = rows["收盤價"] - rows["開盤價"]
     rows["漲跌幅"] = rows["漲跌"] / rows["開盤價"] * 100
-    return rows
+    rows["前日收盤價"] = history["Close"].dropna().shift(1).reindex(rows.index).astype(float)
+    rows["相對前日漲跌"] = rows["收盤價"] - rows["前日收盤價"]
+    rows["相對前日漲跌幅"] = rows["相對前日漲跌"] / rows["前日收盤價"] * 100
+    return rows[["日期", "開盤價", "最高價", "最低價", "收盤價", "月線", "漲跌", "漲跌幅", "相對前日漲跌", "相對前日漲跌幅"]]
 
 
-def _render_candlestick(rows: pd.DataFrame) -> None:
+def render_candlestick_chart(rows: pd.DataFrame) -> None:
     base = alt.Chart(rows).encode(x=alt.X("日期:N", sort=None, axis=alt.Axis(title=None, labelAngle=0)), color=alt.condition("datum['收盤價'] >= datum['開盤價']", alt.value("#ef4444"), alt.value("#22c55e")))
     wick = base.mark_rule().encode(y=alt.Y("最低價:Q", scale=alt.Scale(zero=False), axis=alt.Axis(title=None)), y2="最高價:Q")
     body = base.mark_bar(size=28).encode(y="開盤價:Q", y2="收盤價:Q")
@@ -37,14 +46,20 @@ def _render_candlestick(rows: pd.DataFrame) -> None:
 
 
 def render_snapshot_card(snapshot: QuoteSnapshot) -> None:
-    delta = None if snapshot.change is None or snapshot.change_percent is None else f"{snapshot.change:+,.2f} ({snapshot.change_percent:+.2f}%)"
-    st.metric(f"{snapshot.name} ({snapshot.ticker})", format_number(snapshot.price), delta=delta, delta_color="inverse")
+    st.metric(f"{snapshot.name} ({snapshot.ticker})", format_number(snapshot.price), delta=format_delta(snapshot), delta_color="inverse")
     if snapshot.error:
         st.caption(f"資料狀態：{snapshot.error}")
         return
     if snapshot.fetched_at:
         st.caption(f"來源：{snapshot.source}，更新：{snapshot.fetched_at}")
-    rows = _recent_rows(snapshot.history)
+    rows = get_recent_trading_rows(snapshot.history)
     if not rows.empty:
-        st.dataframe(rows[["日期", "收盤價", "月線", "漲跌", "漲跌幅"]], hide_index=True, use_container_width=True, height=210)
-        _render_candlestick(rows)
+        display_rows = pd.DataFrame({
+            "日期": rows["日期"],
+            "收盤價": rows["收盤價"].map(format_number),
+            "月線": rows["月線"].map(format_number),
+            "漲跌": rows["相對前日漲跌"].map(lambda value: "N/A" if pd.isna(value) else format_number(value)),
+            "漲跌幅": rows["相對前日漲跌幅"].map(lambda value: "N/A" if pd.isna(value) else f"{value:+.2f}%"),
+        })
+        st.dataframe(display_rows, hide_index=True, use_container_width=True, height=210)
+        render_candlestick_chart(rows)

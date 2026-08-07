@@ -43,9 +43,12 @@ Dashboard 只負責畫面與互動；市場資料、規則、復盤格式與 SQL
 ## 目前功能
 
 - `apps/dashboard/`：Streamlit 盤前與盤後工作台。
+- Dashboard 保留市場摘要、五日行情與月線、每日復盤、交易觀念及開發歷程頁。
 - `src/personal_stock_investment_system/`：可供 Dashboard、未來 MCP 與回測共用的核心邏輯。
 - SQLite：保存每日復盤與原始交易／持倉文字，不保存全台股行情。
 - yfinance：依觀察清單或回測標的按需下載歷史行情。
+
+舊 AutoDashboard 的原始 README、PROJECT、TODO、DECISIONS 與 requirements 已封存在 `docs/legacy/autodashboard/`。該目錄只供追溯舊設計；目前架構仍以本 README、`docs/architecture/` 與現有程式碼為準。
 
 ## 在 VS Code Terminal 啟動 Dashboard
 
