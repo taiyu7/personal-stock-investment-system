@@ -1,6 +1,6 @@
 ﻿# 個人股票投資系統
 
-這個 repo 是你的本機「個人股票投資系統」起點，第一階段先建立長期可擴充的架構，不急著一次完成所有功能。
+這個 repo 是你的本機「個人股票投資系統」主線。它以台股投資工作流為核心，並保留美股、半導體與總經指標作為盤前參考。
 
 ## 目標架構
 
@@ -24,13 +24,24 @@
         股票 DB     市場資料      回測
 ```
 
-## 第一階段範圍
+## 目前功能
 
-- 建立本機 repo 與 Git
-- 建立核心目錄結構
-- 建立 README 與架構文件
-- 建立環境設定範本
-- 規劃後續 MCP、資料層、回測模組
+- `apps/dashboard/`：Streamlit 盤前與盤後工作台。
+- `src/personal_stock_investment_system/`：可供 Dashboard、未來 MCP 與回測共用的核心邏輯。
+- SQLite：保存每日復盤與原始交易／持倉文字，不保存全台股行情。
+- yfinance：依觀察清單或回測標的按需下載歷史行情。
+
+## 啟動 Dashboard
+
+```powershell
+cd C:\Users\taiyu\personal-stock-investment-system
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[dev]"
+python -m streamlit run apps\dashboard\app.py
+```
+
+首次儲存每日復盤時，系統會在 `data/local/` 建立 SQLite 資料庫。此檔案只留在本機，不會提交 Git。
 
 ## 暫不實作的內容
 
@@ -42,8 +53,8 @@
 
 ## 建議下一步
 
-1. 決定第一個市場範圍，例如台股、美股，或兩者分開。
-2. 決定第一個資料來源，例如 TWSE、FinMind、Yahoo Finance、券商 API。
+1. 驗證 yfinance 對所需台股與指標的資料完整性。
+2. 新增台股專用資料來源，例如 TWSE、TPEx 或 FinMind。
 3. 建立第一個 MCP server，先只提供唯讀查詢工具。
 4. 建立股票基本資料與日線資料的最小資料表。
 5. 建立第一個簡單回測策略，例如均線或突破策略。

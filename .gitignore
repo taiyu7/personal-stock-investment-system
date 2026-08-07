@@ -5,6 +5,7 @@
 # Python
 __pycache__/
 *.py[cod]
+*.egg-info/
 .venv/
 venv/
 
@@ -17,13 +18,17 @@ pnpm-lock.yaml
 /data/raw/*
 /data/processed/*
 /data/external/*
+/data/local/*
 !/data/raw/.gitkeep
 !/data/processed/.gitkeep
 !/data/external/.gitkeep
+!/data/local/.gitkeep
 
 # Reports and temp outputs
 /backtesting/reports/*
 !/backtesting/reports/.gitkeep
 .tmp/
+.yfinance-cache/
+.streamlit/secrets.toml
 .DS_Store
 Thumbs.db
