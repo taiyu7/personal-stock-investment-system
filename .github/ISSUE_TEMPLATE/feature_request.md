@@ -1,38 +1,19 @@
-\---
-
+---
 name: Feature request
-
-about: 新功能或改善建議
-
-title: "\[Feature] "
-
+about: Suggest a new feature or improvement
+title: "[Feature] "
 labels: "type: feature"
-
 assignees: ""
+---
 
-\---
+## Goal
 
+## Background
 
+## Scope
 
-\## 目標
+- [ ]
 
+## Acceptance Criteria
 
-
-\## 背景
-
-
-
-\## 實作範圍
-
-
-
-\- \[ ]
-
-
-
-\## 驗收條件
-
-
-
-\- \[ ]
-
+- [ ]
