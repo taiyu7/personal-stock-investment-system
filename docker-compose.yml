@@ -1,0 +1,44 @@
+services:
+  app:
+    build:
+      context: .
+    image: personal-stock-investment-system-dev
+    working_dir: /app
+    environment:
+      APP_ENV: local
+      LOG_LEVEL: info
+      TIMEZONE: Asia/Taipei
+      DATABASE_URL: sqlite:///data/local/personal-stock-investment.db
+      ENABLE_LIVE_TRADING: "false"
+    volumes:
+      - ./src:/app/src
+      - ./apps:/app/apps
+      - ./tests:/app/tests
+      - ./data/local:/app/data/local
+    command: pytest
+
+  dashboard:
+    build:
+      context: .
+    image: personal-stock-investment-system-dev
+    working_dir: /app
+    environment:
+      APP_ENV: local
+      LOG_LEVEL: info
+      TIMEZONE: Asia/Taipei
+      DATABASE_URL: sqlite:///data/local/personal-stock-investment.db
+      ENABLE_LIVE_TRADING: "false"
+    volumes:
+      - ./src:/app/src
+      - ./apps:/app/apps
+      - ./data/local:/app/data/local
+    ports:
+      - "8501:8501"
+    command:
+      - python
+      - -m
+      - streamlit
+      - run
+      - apps/dashboard/app.py
+      - --server.address=0.0.0.0
+      - --server.port=8501

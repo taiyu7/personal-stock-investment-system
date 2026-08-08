@@ -179,6 +179,33 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\.venv\Scripts\Activate.ps1
 ```
 
+## 用 Docker 啟動
+
+需求：Docker Desktop，並使用支援 `docker compose` 的版本。
+
+第一次建立開發 image：
+
+```powershell
+cd C:\Users\taiyu\personal-stock-investment-system
+docker compose build
+```
+
+在隔離 container 內執行測試：
+
+```powershell
+docker compose run --rm app pytest
+```
+
+用 Docker 啟動 Dashboard：
+
+```powershell
+docker compose up dashboard
+```
+
+瀏覽器開啟：<http://localhost:8501>
+
+`docker-compose.yml` 會掛載 `src/`、`apps/`、`tests/` 與 `data/local/`，方便在本機修改程式後直接重跑測試或 Dashboard。`.dockerignore` 會排除 `.venv/`、`.pytest_cache/`、`.tmp/`、`.yfinance-cache/` 與本機資料，避免把虛擬環境、快取與暫存資料包進 image。
+
 ## 環境設定
 
 `.env.example` 提供以下設定入口：
@@ -208,7 +235,7 @@ python -m pytest
 
 目前已有 GitHub Actions CI：push 到 `main` 或建立 pull request 時，會在 Ubuntu + Python 3.11 安裝專案並執行 `pytest`。
 
-Docker 化完成後，下一步應補強自動化驗證：
+Docker 開發環境目前可用於本機 build、測試與啟動 Dashboard。下一步可補強自動化驗證：
 
 - 在 CI 中確認 Docker image 可 build。
 - 在 CI 中執行 `docker compose run --rm app pytest`。
