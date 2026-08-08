@@ -86,6 +86,44 @@ AI Orchestrator 負責任務分派、流程編排與結果整合，不直接保�
 - 本機資料庫預設位於 `data/local/personal-stock-investment.db`，不會提交 Git。
 - 未來可透過 `DATABASE_URL` 擴充至 MySQL 或 PostgreSQL。
 
+## 從想法到實作
+
+新的想法先進 Obsidian，再依成熟度進入 GitHub Issues、Project 與主 Repo 實作。
+
+```text
+突然想到
+  ↓
+Obsidian 00-inbox
+  ↓
+整理分類
+  ↓
+Obsidian 正式知識頁 / 04-issues 問題拆解
+  ↓
+GitHub Issue
+  ↓
+GitHub Project 排程
+  ↓
+AI Context 標記目前焦點
+  ↓
+主 Repo 實作
+  ↓
+測試與驗證
+  ↓
+Issue 關閉
+  ↓
+AI Context 更新交接
+  ↓
+Obsidian 補上長期知識或決策
+```
+
+分工原則：
+
+- Obsidian 保存「為什麼與怎麼想」，例如長期知識、研究框架、設計理由與決策紀錄。
+- GitHub Issues 保存「要做什麼」，例如可執行、可驗收、可排程的任務。
+- GitHub Project 管理任務狀態，例如 Backlog、Ready、In Progress、Verify、Done。
+- 主 Repo 保存「實際做了什麼」，例如程式碼、測試、README、架構文件與 roadmap。
+- AI Context 保存「現在做到哪裡」，用於 AI 接手、規範與交接摘要。
+
 ## 專案目錄
 
 ```text
@@ -167,6 +205,14 @@ python -m pytest
 - 市場摘要與總經反向計分
 - 五日行情以前一交易日收盤價計算漲跌
 - 每日復盤的儲存、覆寫、讀回與 Markdown 格式
+
+目前已有 GitHub Actions CI：push 到 `main` 或建立 pull request 時，會在 Ubuntu + Python 3.11 安裝專案並執行 `pytest`。
+
+Docker 化完成後，下一步應補強自動化驗證：
+
+- 在 CI 中確認 Docker image 可 build。
+- 在 CI 中執行 `docker compose run --rm app pytest`。
+- 視需求加入 Dashboard smoke test，確認 Streamlit 服務可啟動並回應。
 
 ## 開發路線
 

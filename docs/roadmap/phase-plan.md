@@ -19,6 +19,7 @@
 - [ ] 建立 Dockerfile、docker-compose.yml 與 .dockerignore
 - [ ] 確認 `docker compose run --rm app pytest` 可通過
 - [ ] 確認 `docker compose up dashboard` 可啟動 Streamlit Dashboard
+- [ ] 在 GitHub Actions 補上 Docker build 與 compose pytest 驗證
 - [ ] 更新 README 的 Docker 開發流程
 
 ## Phase 2：資料層最小可用版
