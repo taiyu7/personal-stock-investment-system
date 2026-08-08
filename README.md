@@ -217,10 +217,13 @@ Docker 化完成後，下一步應補強自動化驗證：
 ## 開發路線
 
 1. **Phase 1：本機骨架**：Repo、文件、環境範本與 Git，已完成。
-2. **Phase 2：資料層 MVP**：Dashboard、yfinance、共用服務與 SQLite，核心功能已完成；下一步驗證台股資料完整性與歷史快照流程。
-3. **Phase 3：MCP MVP**：建立唯讀 server，提供市場行情、市場摘要與每日復盤查詢。
-4. **Phase 4：回測 MVP**：建立策略介面、示範策略、績效統計與報告。
-5. **Phase 5：AI 工作流**：建立盤前、盤後與交易紀律模板，再加入多模型編排與比較。
+2. **Phase 1.5：知識庫與開發環境隔離**：沿用既有 Obsidian vault，接著建立 Docker 開發環境。
+3. **Phase 1.6：自動化測試補強**：Docker 完成後，先補 Dashboard smoke test 與 Docker-based CI 驗證。
+4. **Phase 1.7：研究工具優先**：自動化測試穩定後，先做公司盡職調查工具、財報分析工具與 YouTube 會員影片分析工具。
+5. **Phase 2：資料層 MVP**：Dashboard、yfinance、共用服務與 SQLite，核心功能已完成；ticker 資料完整性與歷史快照流程排在研究工具優先版之後。
+6. **Phase 3：MCP MVP**：建立唯讀 server，提供市場行情、市場摘要與每日復盤查詢。
+7. **Phase 4：回測 MVP**：建立策略介面、示範策略、績效統計與報告。
+8. **Phase 5：AI 工作流**：建立盤前、盤後與交易紀律模板，再加入多模型編排與比較。
 
 完整階段清單請見 `docs/roadmap/phase-plan.md`，分層設計請見 `docs/architecture/overview.md`。
 
