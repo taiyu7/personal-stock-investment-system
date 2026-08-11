@@ -179,6 +179,33 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\.venv\Scripts\Activate.ps1
 ```
 
+## 用 Docker 啟動
+
+需求：Docker Desktop，並使用支援 `docker compose` 的版本。
+
+第一次建立開發 image：
+
+```powershell
+cd C:\Users\taiyu\personal-stock-investment-system
+docker compose build
+```
+
+在隔離 container 內執行測試：
+
+```powershell
+docker compose run --rm app pytest
+```
+
+用 Docker 啟動 Dashboard：
+
+```powershell
+docker compose up dashboard
+```
+
+瀏覽器開啟：<http://localhost:8501>
+
+`docker-compose.yml` 會掛載 `src/`、`apps/`、`tests/` 與 `data/local/`，方便在本機修改程式後直接重跑測試或 Dashboard。`.dockerignore` 會排除 `.venv/`、`.pytest_cache/`、`.tmp/`、`.yfinance-cache/` 與本機資料，避免把虛擬環境、快取與暫存資料包進 image。
+
 ## 環境設定
 
 `.env.example` 提供以下設定入口：
@@ -208,7 +235,7 @@ python -m pytest
 
 目前已有 GitHub Actions CI：push 到 `main` 或建立 pull request 時，會在 Ubuntu + Python 3.11 安裝專案並執行 `pytest`。
 
-Docker 化完成後，下一步應補強自動化驗證：
+Docker 開發環境目前可用於本機 build、測試與啟動 Dashboard。下一步可補強自動化驗證：
 
 - 在 CI 中確認 Docker image 可 build。
 - 在 CI 中執行 `docker compose run --rm app pytest`。
@@ -217,8 +244,8 @@ Docker 化完成後，下一步應補強自動化驗證：
 ## 開發路線
 
 1. **Phase 1：本機骨架**：Repo、文件、環境範本與 Git，已完成。
-2. **Phase 1.5：知識庫與開發環境隔離**：沿用既有 Obsidian vault，接著建立 Docker 開發環境。
-3. **Phase 1.6：自動化測試補強**：Docker 完成後，先補 Dashboard smoke test 與 Docker-based CI 驗證。
+2. **Phase 1.5：知識庫與開發環境隔離**：沿用既有 Obsidian vault，Docker 開發環境已可 build、測試與啟動 Dashboard。
+3. **Phase 1.6：自動化測試補強**：下一步先補 Dashboard smoke test 與 Docker-based CI 驗證。
 4. **Phase 1.7：研究工具優先**：自動化測試穩定後，先做公司盡職調查工具、財報分析工具與 YouTube 會員影片分析工具。
 5. **Phase 2：資料層 MVP**：Dashboard、yfinance、共用服務與 SQLite，核心功能已完成；ticker 資料完整性與歷史快照流程排在研究工具優先版之後。
 6. **Phase 3：MCP MVP**：建立唯讀 server，提供市場行情、市場摘要與每日復盤查詢。

@@ -16,12 +16,13 @@
 - [x] 確認沿用既有 Obsidian vault：`C:\Users\taiyu\Obsidian\個人理財資訊系統`
 - [x] 建立 Obsidian 基本目錄與系統索引
 - [x] 定義 Obsidian 與 GitHub Issues 的分工
+- [x] 將本機 GitHub 帳號切換與 remote 維運方式記錄到 Obsidian
 - [ ] 將必要的 AI context 摘要同步到既有 Obsidian vault
-- [ ] 建立 Dockerfile、docker-compose.yml 與 .dockerignore
-- [ ] 確認 `docker compose run --rm app pytest` 可通過
-- [ ] 確認 `docker compose up dashboard` 可啟動 Streamlit Dashboard
+- [x] 建立 Dockerfile、docker-compose.yml 與 .dockerignore
+- [x] 確認 `docker compose run --rm app pytest` 可通過
+- [x] 確認 `docker compose up dashboard` 可啟動 Streamlit Dashboard
 - [ ] 在 GitHub Actions 補上 Docker build 與 compose pytest 驗證
-- [ ] 更新 README 的 Docker 開發流程
+- [x] 更新 README 的 Docker 開發流程
 
 ## Phase 1.6：自動化測試補強
 
