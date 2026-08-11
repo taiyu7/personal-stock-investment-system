@@ -206,6 +206,8 @@ docker compose up dashboard
 
 `docker-compose.yml` 會掛載 `src/`、`apps/`、`tests/` 與 `data/local/`，方便在本機修改程式後直接重跑測試或 Dashboard。`.dockerignore` 會排除 `.venv/`、`.pytest_cache/`、`.tmp/`、`.yfinance-cache/` 與本機資料，避免把虛擬環境、快取與暫存資料包進 image。
 
+Docker 中的 image 是可重複使用的執行環境範本；container 則是由 image 建立出來的一次執行個體。本專案會使用 `personal-stock-investment-system-dev` 作為開發 image，並以 Python 基底 image 組成它。`docker compose run --rm app pytest` 會建立暫時 container 跑測試，正常結束後會移除；Docker Desktop 裡看到 `Exited (0)` 的 container 則代表它已成功結束，並沒有持續執行。
+
 ## 環境設定
 
 `.env.example` 提供以下設定入口：
@@ -229,23 +231,40 @@ python -m pytest
 目前測試涵蓋：
 
 - yfinance OHLCV 正規化與多層欄位處理
-- 市場摘要與總經反向計分
-- 五日行情以前一交易日收盤價計算漲跌
-- 每日復盤的儲存、覆寫、讀回與 Markdown 格式
+- provider 失敗、空資料與缺少收盤價時的安全處理
+- 市場摘要、總經反向計分與資料不足時的中性判斷
+- 五日行情以前一交易日收盤價計算漲跌，以及 OHLC 欄位缺漏處理
+- 每日復盤的儲存、覆寫、讀回、尚未建立資料庫與 Markdown 格式
 
-目前已有 GitHub Actions CI：push 到 `main` 或建立 pull request 時，會在 Ubuntu + Python 3.11 安裝專案並執行 `pytest`。
+### 可重現依賴
 
-Docker 開發環境目前可用於本機 build、測試與啟動 Dashboard。下一步可補強自動化驗證：
+`requirements.lock` 由 Python 3.11 的 `pip-tools==7.5.2` 產生，鎖定所有直接與遞迴依賴的精確版本與 SHA-256 hash。Docker 與 GitHub Actions 都以此檔案安裝依賴；`setuptools` 也固定在 `pyproject.toml`，避免同一份程式在不同時間解析到不同套件或建置工具版本。
 
-- 在 CI 中確認 Docker image 可 build。
-- 在 CI 中執行 `docker compose run --rm app pytest`。
+修改 `pyproject.toml` 依賴後，請重新產生 lock file：
+
+```powershell
+docker run --rm -v "${PWD}:/workspace" -w /workspace python:3.11-slim sh -c "python -m pip install pip-tools==7.5.2 && pip-compile --extra dev --generate-hashes --output-file requirements.lock pyproject.toml"
+```
+
+目前已有 GitHub Actions CI：push 到 `main` 或建立 pull request 時，會執行以下兩項驗證。CI runner 固定為 Ubuntu 24.04，Python、GitHub Actions 與 Docker base image 也固定到明確版本或不可變 digest：
+
+- Ubuntu + Python 3.11.15 依 `requirements.lock` 安裝專案並執行 `pytest`。
+- `docker compose build`，接著在容器中執行 `docker compose run --rm app pytest`。
+
+Docker 開發環境可用於本機 build、測試與啟動 Dashboard，CI 會同步驗證本機開發時使用的 Docker 測試流程。
 - 視需求加入 Dashboard smoke test，確認 Streamlit 服務可啟動並回應。
+
+### 固定參照的意義
+
+GitHub Actions 的 `actions/checkout` 與 `actions/setup-python` 會以 commit SHA 參照特定、不可變的 action 原始碼；相較於 `@v4` 或 `@v5` 這類可能被更新的標籤，CI 每次都會執行相同版本的 action。
+
+Dockerfile 的 Python base image 以 digest 參照特定 image 內容；`python:3.11-slim` 是可移動的標籤，未來可能指到新版 image，而 `@sha256:...` 則固定指向目前已驗證的那一份內容。升級 action、base image 或依賴時，應主動更新對應參照並重新執行測試。
 
 ## 開發路線
 
 1. **Phase 1：本機骨架**：Repo、文件、環境範本與 Git，已完成。
 2. **Phase 1.5：知識庫與開發環境隔離**：沿用既有 Obsidian vault，Docker 開發環境已可 build、測試與啟動 Dashboard。
-3. **Phase 1.6：自動化測試補強**：下一步先補 Dashboard smoke test 與 Docker-based CI 驗證。
+3. **Phase 1.6：自動化測試補強**：下一步補 Dashboard smoke test，確認 Streamlit 服務可啟動並回應。
 4. **Phase 1.7：研究工具優先**：自動化測試穩定後，先做公司盡職調查工具、財報分析工具與 YouTube 會員影片分析工具。
 5. **Phase 2：資料層 MVP**：Dashboard、yfinance、共用服務與 SQLite，核心功能已完成；ticker 資料完整性與歷史快照流程排在研究工具優先版之後。
 6. **Phase 3：MCP MVP**：建立唯讀 server，提供市場行情、市場摘要與每日復盤查詢。

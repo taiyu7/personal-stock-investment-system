@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM python:3.11-slim
+FROM python:3.11-slim@sha256:90744cff8f32887f075c47d747a173ff333e9e98801667af93c357fa9f5e28ff
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -8,11 +8,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN python -m pip install --upgrade pip
+COPY pyproject.toml README.md requirements.lock ./
+RUN python -m pip install --require-hashes -r requirements.lock
 
-COPY pyproject.toml README.md ./
 COPY src ./src
-RUN python -m pip install -e ".[dev]"
+RUN python -m pip install --no-deps -e .
 
 COPY apps ./apps
 COPY tests ./tests
