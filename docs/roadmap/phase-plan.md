@@ -21,7 +21,7 @@
 - [x] 建立 Dockerfile、docker-compose.yml 與 .dockerignore
 - [x] 確認 `docker compose run --rm app pytest` 可通過
 - [x] 確認 `docker compose up dashboard` 可啟動 Streamlit Dashboard
-- [ ] 在 GitHub Actions 補上 Docker build 與 compose pytest 驗證
+- [x] 在 GitHub Actions 補上 Docker build 與 compose pytest 驗證
 - [x] 更新 README 的 Docker 開發流程
 
 ## Phase 1.6：自動化測試補強
@@ -30,7 +30,7 @@ Docker 開發環境完成後，先補強自動化測試，再開始搭建後續�
 
 - [x] 補強共用核心單元測試，涵蓋 provider、service、rules、repository 的錯誤與缺資料分支
 - [ ] 補 Dashboard smoke test，確認 Streamlit 服務可啟動並回應
-- [ ] 補 Docker-based CI 驗證，讓 GitHub Actions 同時檢查本機 Python 流程與 Docker 流程
+- [x] 補 Docker-based CI 驗證，讓 GitHub Actions 同時檢查本機 Python 流程與 Docker 流程
 - [ ] 整理測試命令與驗收標準到 README
 
 ## Phase 1.7：研究工具優先
