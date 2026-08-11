@@ -8,8 +8,6 @@
 - [x] 建立架構文件
 - [x] 建立環境設定範本
 - [x] 推送主 Repo 到 GitHub
-- [x] 將主 Repo remote 搬到個人 GitHub：`taiyu7/personal-stock-investment-system`
-- [x] 設定 SSH host alias 分流個人與工作 GitHub 帳號
 - [x] 建立 GitHub Issue template
 - [x] 建立 GitHub Project 作為任務看板
 
@@ -18,6 +16,7 @@
 - [x] 確認沿用既有 Obsidian vault：`C:\Users\taiyu\Obsidian\個人理財資訊系統`
 - [x] 建立 Obsidian 基本目錄與系統索引
 - [x] 定義 Obsidian 與 GitHub Issues 的分工
+- [x] 將本機 GitHub 帳號切換與 remote 維運方式記錄到 Obsidian
 - [ ] 將必要的 AI context 摘要同步到既有 Obsidian vault
 - [x] 建立 Dockerfile、docker-compose.yml 與 .dockerignore
 - [x] 確認 `docker compose run --rm app pytest` 可通過

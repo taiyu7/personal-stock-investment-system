@@ -206,29 +206,6 @@ docker compose up dashboard
 
 `docker-compose.yml` 會掛載 `src/`、`apps/`、`tests/` 與 `data/local/`，方便在本機修改程式後直接重跑測試或 Dashboard。`.dockerignore` 會排除 `.venv/`、`.pytest_cache/`、`.tmp/`、`.yfinance-cache/` 與本機資料，避免把虛擬環境、快取與暫存資料包進 image。
 
-## GitHub 帳號與 remote
-
-本機使用 SSH host alias 分開個人與工作 GitHub 帳號，避免 HTTPS credential manager 拿錯帳號。
-
-目前本 Repo 的 `origin` 指向個人帳號：
-
-```text
-git@github-personal:taiyu7/personal-stock-investment-system.git
-```
-
-本機 SSH alias 約定：
-
-- `github-personal`：個人帳號 `taiyu7`
-- `github-work`：工作帳號 `JMW-168`
-
-新 clone 個人 Repo 時使用：
-
-```powershell
-git clone git@github-personal:taiyu7/personal-stock-investment-system.git
-```
-
-若未來需要操作工作帳號底下的 Repo，remote 應使用 `git@github-work:OWNER/REPO.git`，不要混用 `https://github.com/...`，以免推送時套到錯的 GitHub 帳號。
-
 ## 環境設定
 
 `.env.example` 提供以下設定入口：
