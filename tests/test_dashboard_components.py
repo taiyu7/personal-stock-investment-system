@@ -20,3 +20,11 @@ def test_recent_rows_calculates_change_from_previous_close():
     assert len(rows) == 5
     assert rows.iloc[-1]["相對前日漲跌"] == 2
     assert rows.iloc[-1]["相對前日漲跌幅"] == 2 / 105 * 100
+
+
+def test_recent_rows_returns_empty_when_required_price_columns_are_missing():
+    history = pd.DataFrame({"Close": [100.0, 101.0]})
+
+    rows = get_recent_trading_rows(history)
+
+    assert rows.empty

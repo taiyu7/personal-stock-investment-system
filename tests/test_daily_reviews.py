@@ -18,3 +18,9 @@ def test_daily_review_markdown_keeps_existing_sections():
     assert "## 盤前功課" in markdown
     assert "## 盤後復盤" in markdown
     assert "2330 買進" in markdown
+
+
+def test_daily_review_load_returns_none_before_database_exists(tmp_path):
+    repository = DailyReviewRepository(tmp_path / "reviews.db")
+
+    assert repository.load("2026/08/07") is None
