@@ -37,7 +37,7 @@
 Docker 開發環境完成後，先補強自動化測試，再開始搭建後續工具。
 
 - [x] 補強共用核心單元測試，涵蓋 provider、service、rules、repository 的錯誤與缺資料分支
-- [ ] 補 Dashboard smoke test，確認 Streamlit 服務可啟動並回應
+- [x] 補 Dashboard smoke test，確認 Streamlit 服務可啟動並回應
 - [x] 補 Docker-based CI 驗證，讓 GitHub Actions 同時檢查本機 Python 流程與 Docker 流程
 - [ ] 整理測試命令與驗收標準到 README
 
