@@ -5,6 +5,17 @@ import streamlit as st
 
 FEATURE_LOG = [
     {
+        "version": "v0.8.0",
+        "title": "可重現開發環境與文件治理",
+        "items": [
+            "固定 GitHub Actions runner、Python、action SHA、Docker base image digest 與 Python lock file，降低 CI 結果漂移。",
+            "補完整系統架構文件與資料庫 schema / migration 策略，明確區分現行功能與未來目標。",
+            "建立 Docker 優先驗證習慣：一般程式、UI、測試或文件變更不重建 image，只有依賴或 Docker 設定變更才 rebuild。",
+            "新增本機 .env 作為執行設定入口，並移除主 repo .venv，後續預設以 Docker 驗證。",
+            "調整近期優先順序：先整理目前 Obsidian vault 架構，再補 Dashboard smoke test 與研究工具。",
+        ],
+    },
+    {
         "version": "v0.7.0",
         "title": "整合至個人股票投資系統",
         "items": [
