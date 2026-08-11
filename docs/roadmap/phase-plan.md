@@ -1,5 +1,12 @@
 ﻿# 路線圖
 
+## 近期優先任務
+
+1. 整理目前 Obsidian vault 架構，確認索引、系統設計、研究筆記、決策紀錄與 issue 拆解的分工。
+2. 補 Dashboard smoke test，確認 Streamlit 服務可啟動並回應。
+3. 搭建公司盡職調查工具、財報分析工具與 YouTube 會員影片分析工具。
+4. 研究工具優先版完成後，再做 12 個預設 ticker 的資料完整性檢查。
+
 ## Phase 1：本機骨架
 
 - [x] 建立根目錄
@@ -17,6 +24,7 @@
 - [x] 建立 Obsidian 基本目錄與系統索引
 - [x] 定義 Obsidian 與 GitHub Issues 的分工
 - [x] 將本機 GitHub 帳號切換與 remote 維運方式記錄到 Obsidian
+- [ ] 整理目前 Obsidian vault 架構，確認索引、系統設計、研究筆記、決策紀錄與 issue 拆解的分工
 - [ ] 將必要的 AI context 摘要同步到既有 Obsidian vault
 - [x] 建立 Dockerfile、docker-compose.yml 與 .dockerignore
 - [x] 確認 `docker compose run --rm app pytest` 可通過
