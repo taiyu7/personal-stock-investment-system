@@ -206,6 +206,29 @@ docker compose up dashboard
 
 `docker-compose.yml` 會掛載 `src/`、`apps/`、`tests/` 與 `data/local/`，方便在本機修改程式後直接重跑測試或 Dashboard。`.dockerignore` 會排除 `.venv/`、`.pytest_cache/`、`.tmp/`、`.yfinance-cache/` 與本機資料，避免把虛擬環境、快取與暫存資料包進 image。
 
+## GitHub 帳號與 remote
+
+本機使用 SSH host alias 分開個人與工作 GitHub 帳號，避免 HTTPS credential manager 拿錯帳號。
+
+目前本 Repo 的 `origin` 指向個人帳號：
+
+```text
+git@github-personal:taiyu7/personal-stock-investment-system.git
+```
+
+本機 SSH alias 約定：
+
+- `github-personal`：個人帳號 `taiyu7`
+- `github-work`：工作帳號 `JMW-168`
+
+新 clone 個人 Repo 時使用：
+
+```powershell
+git clone git@github-personal:taiyu7/personal-stock-investment-system.git
+```
+
+若未來需要操作工作帳號底下的 Repo，remote 應使用 `git@github-work:OWNER/REPO.git`，不要混用 `https://github.com/...`，以免推送時套到錯的 GitHub 帳號。
+
 ## 環境設定
 
 `.env.example` 提供以下設定入口：
@@ -244,8 +267,8 @@ Docker 開發環境目前可用於本機 build、測試與啟動 Dashboard。下
 ## 開發路線
 
 1. **Phase 1：本機骨架**：Repo、文件、環境範本與 Git，已完成。
-2. **Phase 1.5：知識庫與開發環境隔離**：沿用既有 Obsidian vault，接著建立 Docker 開發環境。
-3. **Phase 1.6：自動化測試補強**：Docker 完成後，先補 Dashboard smoke test 與 Docker-based CI 驗證。
+2. **Phase 1.5：知識庫與開發環境隔離**：沿用既有 Obsidian vault，Docker 開發環境已可 build、測試與啟動 Dashboard。
+3. **Phase 1.6：自動化測試補強**：下一步先補 Dashboard smoke test 與 Docker-based CI 驗證。
 4. **Phase 1.7：研究工具優先**：自動化測試穩定後，先做公司盡職調查工具、財報分析工具與 YouTube 會員影片分析工具。
 5. **Phase 2：資料層 MVP**：Dashboard、yfinance、共用服務與 SQLite，核心功能已完成；ticker 資料完整性與歷史快照流程排在研究工具優先版之後。
 6. **Phase 3：MCP MVP**：建立唯讀 server，提供市場行情、市場摘要與每日復盤查詢。
