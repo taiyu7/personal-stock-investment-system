@@ -86,7 +86,7 @@ AI Orchestrator 負責任務分派、流程編排與結果整合，不直接保�
 - 本機資料庫預設位於 `data/local/personal-stock-investment.db`，不會提交 Git。
 - 未來可透過 `DATABASE_URL` 擴充至 MySQL 或 PostgreSQL。
 
-## 從想法到實作
+## 從想法到實作(workflow)
 
 新的想法先進 Obsidian，再依成熟度進入 GitHub Issues、Project 與主 Repo 實作。
 
@@ -271,12 +271,8 @@ Dockerfile 的 Python base image 以 digest 參照特定 image 內容；`python:
 7. **Phase 4：回測 MVP**：建立策略介面、示範策略、績效統計與報告。
 8. **Phase 5：AI 工作流**：建立盤前、盤後與交易紀律模板，再加入多模型編排與比較。
 
-完整階段清單請見 `docs/roadmap/phase-plan.md`，分層設計請見 `docs/architecture/overview.md`。
+完整階段清單請見 `docs/roadmap/phase-plan.md`，分層設計請見 `docs/architecture/overview.md`，資料庫 schema 與 migration 策略請見 `db/README.md`。
 
 ## 安全邊界
 
 目前不實作券商 API、自動下單、實盤交易或完整全市場資料倉。所有交易結論都應由使用者自行確認；系統現階段定位為研究、記錄與決策輔助工具。
-
-## AutoDashboard 遷移說明
-
-舊 AutoDashboard 的功能已整合至本 Repo。原始 README、PROJECT、TODO、DECISIONS、requirements 與來源提交資訊保存在 `docs/legacy/autodashboard/`，只供歷史追溯；後續程式與文件維護皆以本 Repo 為準。
