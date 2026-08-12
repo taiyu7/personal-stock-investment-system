@@ -4,6 +4,8 @@
 
 目前可直接使用的是 Streamlit Dashboard、yfinance 按需行情、規則訊號與 SQLite 每日復盤。MCP、回測引擎與 AI Orchestrator 會依路線圖分階段加入。
 
+目前開發流程以 Docker 為預設執行環境；本機 Python 只作為可選 fallback，不是日常啟動方式。
+
 ## 目前可用架構
 
 ```text
@@ -143,43 +145,13 @@ personal-stock-investment-system/
 ├── clients/                               # ChatGPT／Claude／Gemini 約定
 ├── config/                                # 非敏感設定文件
 ├── docs/architecture/                     # 架構文件
+├── docs/research/                         # 研究工具規格與文件
 ├── docs/roadmap/                          # 階段路線圖
 ├── docs/legacy/autodashboard/             # 舊專案文件封存
 └── tests/                                 # 單元測試
 ```
 
-## 在 Windows 啟動
-
-需求：Python 3.11 以上。
-
-第一次建立環境並安裝套件：
-
-```powershell
-cd C:\Users\taiyu\personal-stock-investment-system
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[dev]"
-Copy-Item .env.example .env
-```
-
-之後每次在 VS Code Terminal 啟動 Dashboard：
-
-```powershell
-cd C:\Users\taiyu\personal-stock-investment-system
-.\.venv\Scripts\Activate.ps1
-python -m streamlit run apps\dashboard\app.py
-```
-
-瀏覽器開啟：<http://localhost:8501>
-
-若 PowerShell 阻擋虛擬環境啟用，可只對目前 Terminal 執行：
-
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\.venv\Scripts\Activate.ps1
-```
-
-## 用 Docker 啟動
+## 在 Windows 啟動 Docker
 
 需求：Docker Desktop，並使用支援 `docker compose` 的版本。
 
@@ -190,13 +162,7 @@ cd C:\Users\taiyu\personal-stock-investment-system
 docker compose build
 ```
 
-在隔離 container 內執行測試：
-
-```powershell
-docker compose run --rm app pytest
-```
-
-用 Docker 啟動 Dashboard：
+啟動 Dashboard：
 
 ```powershell
 docker compose up dashboard
@@ -204,9 +170,41 @@ docker compose up dashboard
 
 瀏覽器開啟：<http://localhost:8501>
 
+執行測試：
+
+```powershell
+docker compose run --rm app pytest
+```
+
 `docker-compose.yml` 會掛載 `src/`、`apps/`、`tests/` 與 `data/local/`，方便在本機修改程式後直接重跑測試或 Dashboard。`.dockerignore` 會排除 `.venv/`、`.pytest_cache/`、`.tmp/`、`.yfinance-cache/` 與本機資料，避免把虛擬環境、快取與暫存資料包進 image。
 
 Docker 中的 image 是可重複使用的執行環境範本；container 則是由 image 建立出來的一次執行個體。本專案會使用 `personal-stock-investment-system-dev` 作為開發 image，並以 Python 基底 image 組成它。`docker compose run --rm app pytest` 會建立暫時 container 跑測試，正常結束後會移除；Docker Desktop 裡看到 `Exited (0)` 的 container 則代表它已成功結束，並沒有持續執行。
+
+## 本機 Python fallback
+
+日常開發優先使用 Docker。只有在需要快速檢查或 Docker 不方便啟動時，才使用本機 Python。
+
+需求：Python 3.11 以上。
+
+```powershell
+cd C:\Users\taiyu\personal-stock-investment-system
+python -m pip install --require-hashes -r requirements.lock
+python -m pip install --no-deps -e .
+```
+
+本機執行測試：
+
+```powershell
+pytest
+```
+
+本機啟動 Dashboard：
+
+```powershell
+python -m streamlit run apps\dashboard\app.py
+```
+
+本專案目前沒有要求建立 `.venv`。若使用者自行建立虛擬環境，請勿提交 `.venv/`。
 
 ## 環境設定
 
@@ -222,10 +220,17 @@ Docker 中的 image 是可重複使用的執行環境範本；container 則是�
 
 ## 測試
 
+預設使用 Docker 執行完整測試：
+
 ```powershell
 cd C:\Users\taiyu\personal-stock-investment-system
-.\.venv\Scripts\Activate.ps1
-python -m pytest
+docker compose run --rm app pytest
+```
+
+若使用本機 Python fallback：
+
+```powershell
+pytest
 ```
 
 目前測試涵蓋：
@@ -235,6 +240,8 @@ python -m pytest
 - 市場摘要、總經反向計分與資料不足時的中性判斷
 - 五日行情以前一交易日收盤價計算漲跌，以及 OHLC 欄位缺漏處理
 - 每日復盤的儲存、覆寫、讀回、尚未建立資料庫與 Markdown 格式
+- Dashboard 資料表的防呆邏輯
+- Streamlit Dashboard 啟動 smoke test
 
 ### 可重現依賴
 
@@ -251,8 +258,7 @@ docker run --rm -v "${PWD}:/workspace" -w /workspace python:3.11-slim sh -c "pyt
 - Ubuntu + Python 3.11.15 依 `requirements.lock` 安裝專案並執行 `pytest`。
 - `docker compose build`，接著在容器中執行 `docker compose run --rm app pytest`。
 
-Docker 開發環境可用於本機 build、測試與啟動 Dashboard，CI 會同步驗證本機開發時使用的 Docker 測試流程。
-- 視需求加入 Dashboard smoke test，確認 Streamlit 服務可啟動並回應。
+Docker 開發環境可用於本機 build、測試與啟動 Dashboard，CI 會同步驗證本機開發時使用的 Docker 測試流程。Dashboard smoke test 已納入自動化測試。
 
 ### 固定參照的意義
 
@@ -264,14 +270,16 @@ Dockerfile 的 Python base image 以 digest 參照特定 image 內容；`python:
 
 1. **Phase 1：本機骨架**：Repo、文件、環境範本與 Git，已完成。
 2. **Phase 1.5：知識庫與開發環境隔離**：沿用既有 Obsidian vault，Docker 開發環境已可 build、測試與啟動 Dashboard。
-3. **Phase 1.6：自動化測試補強**：下一步補 Dashboard smoke test，確認 Streamlit 服務可啟動並回應。
-4. **Phase 1.7：研究工具優先**：自動化測試穩定後，先做公司盡職調查工具、財報分析工具與 YouTube 會員影片分析工具。
+3. **Phase 1.6：自動化測試補強**：核心單元測試、Docker-based CI 與 Dashboard smoke test 已完成。
+4. **Phase 1.7：研究工具優先**：目前焦點是第一階段研究來源分析工具，支援公開影片、PDF 轉 Markdown、手動文字 fallback 與固定股票研究報告。
 5. **Phase 2：資料層 MVP**：Dashboard、yfinance、共用服務與 SQLite，核心功能已完成；ticker 資料完整性與歷史快照流程排在研究工具優先版之後。
 6. **Phase 3：MCP MVP**：建立唯讀 server，提供市場行情、市場摘要與每日復盤查詢。
 7. **Phase 4：回測 MVP**：建立策略介面、示範策略、績效統計與報告。
 8. **Phase 5：AI 工作流**：建立盤前、盤後與交易紀律模板，再加入多模型編排與比較。
 
-完整階段清單請見 `docs/roadmap/phase-plan.md`，分層設計請見 `docs/architecture/overview.md`，資料庫 schema 與 migration 策略請見 `db/README.md`。
+完整階段清單請見 `docs/roadmap/phase-plan.md`，分層設計請見 `docs/architecture/overview.md`，資料庫 schema 與 migration 策略請見 `db/README.md`。第一階段研究來源分析工具規格請見 `docs/research/phase-1-research-source-spec.md`。
+
+目前已建立研究來源分析工具的 GitHub Issues：#12 至 #17。
 
 ## 安全邊界
 
