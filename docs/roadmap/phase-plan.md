@@ -52,7 +52,7 @@ Docker 開發環境完成後，先補強自動化測試，再開始搭建後續�
   - [x] #13 PDF 轉 Markdown MVP：builtin fallback、PyMuPDF4LLM optional backend、`pdf-tools` Docker profile。
   - [ ] 真實投顧 PDF / 簡報 PDF 品質驗收。
   - [x] #14 公開 YouTube 影片匯入與逐字稿 fallback。
-  - [ ] #15 股票觀點分析與固定研究報告輸出。
+  - [x] #15 股票觀點分析與固定研究報告輸出。
   - [ ] #16 研究報告輸出目的地設定。
   - [ ] #17 第一階段研究來源分析工具入口。
 - [ ] 建立盤前分析、盤後復盤與交易紀律檢查模板
