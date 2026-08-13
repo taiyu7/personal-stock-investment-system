@@ -5,6 +5,15 @@ import streamlit as st
 
 FEATURE_LOG = [
     {
+        "version": "v0.9.0",
+        "title": "第一階段研究來源分析工具",
+        "items": [
+            "新增左側 sidebar 的研究來源分析入口，支援手動文字、PDF 路徑與公開 YouTube URL fallback。",
+            "建立研究來源資料模型、固定 Markdown 報告、rule-based 股票觀點分析與輸出目的地設定。",
+            "目前 YouTube 只提供 URL 解析與 transcript_unavailable fallback，尚未接真實 CC 字幕 adapter。",
+        ],
+    },
+    {
         "version": "v0.8.0",
         "title": "可重現開發環境與文件治理",
         "items": [

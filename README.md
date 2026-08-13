@@ -2,7 +2,7 @@
 
 這是個人股票投資系統的唯一主線 Repo。系統以台股投資流程為核心，將美股、半導體與總經指標作為盤前參考，逐步整合 Dashboard、共用市場資料服務、個人交易紀錄、MCP、回測與多模型 AI 工作流。
 
-目前可直接使用的是 Streamlit Dashboard、yfinance 按需行情、規則訊號與 SQLite 每日復盤。MCP、回測引擎與 AI Orchestrator 會依路線圖分階段加入。
+目前可直接使用的是 Streamlit Dashboard、yfinance 按需行情、規則訊號、SQLite 每日復盤，以及第一階段研究來源分析工具入口。研究工具可處理手動文字、文字型 PDF 前處理與公開 YouTube URL fallback 狀態；真實 YouTube CC 字幕讀取尚未接上 adapter。MCP、回測引擎與 AI Orchestrator 會依路線圖分階段加入。
 
 目前開發流程以 Docker 為預設執行環境；本機 Python 只作為可選 fallback，不是日常啟動方式。
 
@@ -12,8 +12,8 @@
                               使用者
                                  │
                                  ▼
-                  Streamlit Dashboard v0.7.0
-                    盤前觀察 / 盤後復盤工作台
+                  Streamlit Dashboard v0.9.0
+              盤前觀察 / 盤後復盤 / 研究來源分析
                                  │
                                  ▼
               personal_stock_investment_system 共用核心
@@ -68,9 +68,12 @@ AI Orchestrator 負責任務分派、流程編排與結果整合，不直接保�
 ## Dashboard 功能
 
 - **市場儀表板**：四個觀察區塊、市場摘要、五日行情、漲跌幅與月線 K 線圖。
+- **研究來源分析**：從左側 sidebar 進入，支援手動文字／逐字稿、PDF 路徑與公開 YouTube URL，產生固定格式研究報告 Markdown，並可依設定輸出到 Obsidian inbox、自選路徑或只在介面顯示。
 - **每日復盤**：填寫盤前／盤後持股水位、交易紀錄、計畫符合度與檢討內容；可依日期儲存、覆寫、載入及下載 Markdown。
 - **進銘的股價概念**：保存既有的價格、成交量與判讀框架。
-- **開發歷程**：保留 AutoDashboard v0.1 至 v0.6 的歷史，並記錄整合後的 v0.7。
+- **開發歷程**：保留 AutoDashboard v0.1 至 v0.6 的歷史，並記錄整合後的功能演進。
+
+研究來源分析目前是第一階段 MVP：YouTube URL 會解析 video id 並顯示逐字稿 fallback 狀態，但尚未實際抓取 YouTube CC 或 automatic captions。若要分析影片內容，目前需要手動貼上逐字稿或摘要；後續會補真實字幕 adapter。
 
 預設觀察清單分為：
 
@@ -134,7 +137,7 @@ personal-stock-investment-system/
 ├── src/personal_stock_investment_system/  # 共用 Python 核心套件
 │   ├── config/                            # 觀察清單設定
 │   ├── market_data/                       # Provider、行情模型與摘要服務
-│   ├── research/                          # 研究來源資料模型與 Markdown 報告
+│   ├── research/                          # 研究來源模型、PDF/YouTube adapter、分析、輸出與入口
 │   ├── signals/                           # 偏多／中性／偏空規則引擎
 │   └── storage/                           # SQLite 每日復盤 Repository
 ├── data/                                  # 本機資料；內容不提交 Git
@@ -267,6 +270,10 @@ pytest
 - 每日復盤的儲存、覆寫、讀回、尚未建立資料庫與 Markdown 格式
 - 研究來源資料模型與固定格式 Markdown 報告輸出
 - 文字型 PDF 轉 Markdown，並保留頁碼定位；可選用 PyMuPDF4LLM backend 處理進階 PDF
+- 公開 YouTube URL 解析、逐字稿 fallback 狀態與 fake/mock 字幕 adapter 測試
+- 固定文字逐字稿轉成股票研究報告，包含人物觀點、族群關聯、公司業務、技術分析、假設、風險與待查問題
+- 研究報告輸出目的地設定，可輸出到 Obsidian inbox、自選路徑，或不寫入本機檔案
+- 第一階段研究來源分析入口，支援手動文字、PDF 前處理、YouTube fallback 狀態與暫存輸出目的地測試
 - Dashboard 資料表的防呆邏輯
 - Streamlit Dashboard 啟動 smoke test
 
@@ -298,16 +305,15 @@ Dockerfile 的 Python base image 以 digest 參照特定 image 內容；`python:
 1. **Phase 1：本機骨架**：Repo、文件、環境範本與 Git，已完成。
 2. **Phase 1.5：知識庫與開發環境隔離**：沿用既有 Obsidian vault，Docker 開發環境已可 build、測試與啟動 Dashboard。
 3. **Phase 1.6：自動化測試補強**：核心單元測試、Docker-based CI 與 Dashboard smoke test 已完成。
-4. **Phase 1.7：研究工具優先**：目前焦點是第一階段研究來源分析工具，支援公開影片、PDF 轉 Markdown、手動文字 fallback 與固定股票研究報告。
-   - 已完成 #12 研究來源資料模型與固定 Markdown 報告模型，以及 #13 PDF 轉 Markdown MVP。#13 目前支援 `builtin` fallback、PyMuPDF4LLM optional backend 與 `pdf-tools` Docker profile。
-5. **Phase 2：資料層 MVP**：Dashboard、yfinance、共用服務與 SQLite，核心功能已完成；ticker 資料完整性與歷史快照流程排在研究工具優先版之後。
+4. **Phase 1.7：研究工具優先**：#12 至 #17 已完成第一階段研究來源分析工具 MVP，包含資料模型、PDF 轉 Markdown、YouTube fallback、股票觀點分析、輸出目的地設定與 Streamlit sidebar 入口。尚未完成真實 YouTube CC 字幕 adapter、真實 PDF 品質驗收與 Obsidian 長期知識整理流程。
+5. **Phase 2：資料層 MVP**：Dashboard、yfinance、共用服務與 SQLite，核心功能已完成；下一步是在研究工具 MVP 後驗證 12 個預設 ticker 的資料完整性，決定是否新增 TWSE、TPEx 或 FinMind provider。
 6. **Phase 3：MCP MVP**：建立唯讀 server，提供市場行情、市場摘要與每日復盤查詢。
 7. **Phase 4：回測 MVP**：建立策略介面、示範策略、績效統計與報告。
 8. **Phase 5：AI 工作流**：建立盤前、盤後與交易紀律模板，再加入多模型編排與比較。
 
 完整階段清單請見 `docs/roadmap/phase-plan.md`，分層設計請見 `docs/architecture/overview.md`，資料庫 schema 與 migration 策略請見 `db/README.md`。第一階段研究來源分析工具規格請見 `docs/research/phase-1-research-source-spec.md`。
 
-目前已建立研究來源分析工具的 GitHub Issues：#12 至 #17。
+目前已完成研究來源分析工具的 GitHub Issues：#12 至 #17。下一批研究工具工作會優先補真實 YouTube 字幕 adapter，接著處理 YouTube 會員影片 / 受限制來源合法取得流程，再展開本機影片、本機音訊、podcast 與技術分析圖面自動截圖。完整規劃請見 `docs/research/media-source-ingestion-roadmap.md`。
 
 ## 安全邊界
 

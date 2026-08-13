@@ -8,9 +8,10 @@
 使用者
   │
   ▼
-Streamlit Dashboard v0.7.0
+Streamlit Dashboard v0.9.0
   │
   ├─ 市場儀表板
+  ├─ 研究來源分析
   ├─ 每日復盤
   ├─ 股價概念
   └─ 開發歷程
@@ -24,6 +25,10 @@ personal_stock_investment_system 共用核心
   ├─ research/sources.py
   ├─ research/markdown.py
   ├─ research/pdf.py
+  ├─ research/youtube.py
+  ├─ research/analysis.py
+  ├─ research/output.py
+  ├─ research/entrypoint.py
   ├─ signals/rules.py
   ├─ reviews.py
   └─ storage/daily_reviews.py
@@ -40,6 +45,7 @@ personal_stock_investment_system 共用核心
 `apps/dashboard/` 是每天使用的盤前與盤後工作台。
 
 - 顯示四個市場觀察區塊、整體市場摘要、五日行情與月線圖。
+- 從左側 sidebar 提供研究來源分析入口，支援手動文字、PDF 路徑與公開 YouTube URL fallback。
 - 提供每日復盤表單，支援儲存、覆寫、載入與 Markdown 下載。
 - 使用 Streamlit 15 分鐘記憶體快取減少重複抓取行情。
 - 不直接承擔可重用商業邏輯；共用邏輯應放回核心套件。
@@ -54,6 +60,10 @@ personal_stock_investment_system 共用核心
 - `research/sources.py`：研究來源、來源引用、股票觀點、公司業務、技術分析與可驗證假設資料模型。
 - `research/markdown.py`：固定格式研究來源分析報告 Markdown renderer。
 - `research/pdf.py`：PDF 轉 Markdown backend；目前支援 `builtin` fallback 與 `pymupdf4llm` optional backend。
+- `research/youtube.py`：公開 YouTube URL 解析、metadata/transcript adapter 介面與手動文字 fallback 狀態。
+- `research/analysis.py`：保守 rule-based 股票觀點分析，將來源文字整理成固定研究報告資料結構。
+- `research/output.py`：研究報告輸出目的地設定與 Markdown 寫檔。
+- `research/entrypoint.py`：第一階段研究來源分析共用入口，供 Streamlit 與未來 CLI 重複使用。
 - `signals/rules.py`：偏多／中性／偏空透明規則，macro 區塊反向計分。
 - `reviews.py`：每日復盤 Markdown 與市場摘要文字。
 - `storage/daily_reviews.py`：SQLite 每日復盤 repository。
@@ -82,7 +92,7 @@ personal_stock_investment_system 共用核心
 
 ### 測試與 CI
 
-目前測試涵蓋 provider、market summary service、signal rules、daily review repository、研究來源報告模型、PDF 轉 Markdown backend 與部分 Dashboard helper。
+目前測試涵蓋 provider、market summary service、signal rules、daily review repository、研究來源報告模型、PDF 轉 Markdown backend、YouTube fallback adapter、研究分析器、輸出目的地、第一階段入口與部分 Dashboard helper。
 
 CI 在 push 到 `main` 或建立 PR 時執行：
 
@@ -99,6 +109,13 @@ Docker 與 CI 使用固定 Python 版本、GitHub Actions SHA、Docker digest �
 - `docker compose --profile pdf-tools run --rm pdf-tools pytest tests/test_pdf_research.py` 在 PDF 工具環境驗證 #13。
 
 日常 `app` / `dashboard` image 不安裝 PyMuPDF4LLM，避免重型 PDF 依賴拖慢一般開發流程。
+
+## 已知限制
+
+- YouTube：目前核心有 `YouTubePublicClient` protocol 與 `TranscriptUnavailableYouTubeClient` fallback，但尚未接真實 YouTube CC / automatic captions adapter。因此公開影片即使有 CC，Streamlit 入口目前仍會顯示 `transcript_unavailable`，除非使用者手動貼逐字稿或摘要。
+- PDF：文字型 PDF 已可轉 Markdown；掃描 PDF、複雜表格、簡報圖文混排仍需真實樣本驗收。
+- 股票觀點分析：目前是 rule-based MVP，只根據來源文字抽取，不用模型記憶補公司介紹；缺資料時輸出 `未判定` 或 `待查證`。
+- 輸出：已支援 Obsidian inbox、自選路徑與不輸出本機檔案；把輸出整理成 Obsidian 長期知識頁仍是後續流程。
 
 ## 目標架構
 

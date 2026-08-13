@@ -319,6 +319,8 @@ src/personal_stock_investment_system/research/
   youtube.py
   analysis.py
   markdown.py
+  output.py
+  entrypoint.py
 ```
 
 責任分工：
@@ -328,10 +330,12 @@ src/personal_stock_investment_system/research/
 - `youtube.py`：公開 YouTube metadata 與可用文字來源匯入。
 - `analysis.py`：將 Markdown/text 轉成研究報告資料結構。
 - `markdown.py`：將研究報告資料結構輸出成 Markdown。
+- `output.py`：研究報告輸出目的地設定與 Markdown 檔案寫入。
+- `entrypoint.py`：第一階段研究來源分析工具的共用入口，供 Streamlit 或未來 CLI 重複使用。
 
 ## 目前實作狀態
 
-截至 2026-08-13，主 Repo `main` 已完成：
+截至 2026-08-13，主 Repo 已完成第一階段研究來源分析工具的 MVP 骨架：
 
 - #12：`src/personal_stock_investment_system/research/sources.py` 定義 `ResearchSource`、`ResearchReport`、`SourceReference`、`StockOpinion`、`StockRelation`、`CompanyProfileNote`、`TechnicalAnalysisNote`、`VerifiableHypothesis`。
 - #12：`markdown.py` 可將 `ResearchReport` 轉成固定格式 Markdown，並支援多位 `speakers` 顯示為「講者／來賓」。
@@ -339,10 +343,14 @@ src/personal_stock_investment_system/research/
 - #13：`pdf.py` 提供 `pdf_to_markdown()`、`extract_text_pages()`、`build_pdf_research_source()`。
 - #13：PDF backend 支援 `builtin` 與 `pymupdf4llm`。`builtin` 是最小本地 fallback；`pymupdf4llm` 是 optional backend。
 - #13：`docker-compose.yml` 已新增 `pdf-tools` profile，可建立含 PyMuPDF4LLM 的獨立 Docker image，不拖重日常 `app` / `dashboard` image。
+- #14：`youtube.py` 可解析公開 YouTube URL 的 video id，並提供 metadata/transcript adapter 介面、手動文字 fallback 與 `transcript_unavailable` 狀態。
+- #15：`analysis.py` 可用保守 rule-based 流程，從固定逐字稿/text 產生 `ResearchReport`，包含人物觀點、族群關聯、公司業務、技術分析、可驗證假設、風險與待查問題。
+- #16：`output.py` 定義輸出目的地設定，支援 Obsidian inbox、自選路徑、兩者都輸出、只輸出其一，或不輸出本機檔案。
+- #17：`entrypoint.py` 與 Streamlit sidebar「研究來源分析」頁面提供第一階段操作入口，支援手動文字、PDF 路徑與公開 YouTube URL。
 
 已驗證：
 
-- `docker compose run --rm app pytest`：23 passed。
+- `docker compose run --rm app pytest`：40 passed。
 - `docker compose --profile pdf-tools build pdf-tools`：成功。
 - `docker compose --profile pdf-tools run --rm pdf-tools`：顯示 `pymupdf4llm ready`。
 - `docker compose --profile pdf-tools run --rm pdf-tools pytest tests/test_pdf_research.py`：5 passed。
@@ -351,10 +359,11 @@ src/personal_stock_investment_system/research/
 
 - 使用真實投顧 PDF / 簡報 PDF 進行品質驗收。
 - OCR / 掃描 PDF 品質驗收。
-- YouTube 匯入與逐字稿 fallback。
-- 將 Markdown/text 轉成股票研究報告的分析流程。
-- 輸出到 Obsidian inbox / 自選路徑的設定。
-- Streamlit 或 CLI 入口。
+- 真實 YouTube CC / automatic captions adapter。現行 `TranscriptUnavailableYouTubeClient` 是安全 fallback，不會實際讀取 YouTube 字幕；即使影片有 CC，入口也會顯示 `transcript_unavailable`，除非未來接上真實 adapter 或使用者手動貼逐字稿。
+- YouTube 字幕語言選擇、人工 CC 與自動字幕狀態辨識。
+- PDF 文字品質與版面品質的真實樣本驗收。
+- 將研究工具輸出回寫或整理到 Obsidian 長期知識頁的流程。
+- CLI 入口；目前可操作入口是 Streamlit sidebar 頁面。
 
 ## 建議資料模型
 
@@ -407,17 +416,26 @@ confidence
 3. 使用固定文字樣本撰寫分析輸出測試。
 4. 實作 PDF 轉 Markdown 的最小版本。
 5. 實作手動文字輸入到研究報告的純核心流程。
-6. 加入公開 YouTube metadata 匯入。
-7. 加入公開逐字稿取得或手動貼上 fallback。
-8. 實作輸出目的地設定，預設輸出到 Obsidian inbox 與桌面自選路徑。
-9. 視需要加入 CLI 或 Streamlit UI。
-10. 再評估音訊轉錄與會員影片取得素材流程。
+6. 加入公開 YouTube metadata 匯入與 fallback 狀態。
+7. 實作輸出目的地設定，預設輸出到 Obsidian inbox 與桌面自選路徑。
+8. 加入 Streamlit sidebar 操作入口。
+9. 補真實 YouTube CC / automatic captions adapter，並把網路整合測試與純核心測試分開。
+10. 使用真實投顧 PDF / 簡報 PDF 驗收 PDF 轉 Markdown 品質。
+11. 再評估音訊轉錄與會員影片取得素材流程。
 
 ## 後續階段
 
-### 第二階段：音訊轉錄
+### 第二階段：影音來源匯入與轉錄
 
-當公開影片沒有逐字稿時，支援使用者提供合法取得的音訊檔，轉錄成文字後進入同一套流程。
+當公開影片沒有逐字稿時，支援更多合法取得的影音素材，轉錄成文字後進入同一套流程。這條主線包含：
+
+- 真實公開 YouTube CC / automatic captions adapter。
+- YouTube 會員影片 / 受限制影音來源的合法取得流程；待使用者提供既有登入或素材取得機制後再細化。
+- 本機影片 / 音訊檔匯入與語音轉文字。
+- Podcast 音頻匯入。
+- 技術分析圖面自動截圖：當逐字稿提到「這張圖」、「這裡」、「這根 K」等圖面時，依時間戳擷取影片畫面，不要求使用者手工截圖。
+
+詳細規劃請見 `docs/research/media-source-ingestion-roadmap.md`。
 
 ### 第三階段：批次分析
 
