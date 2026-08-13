@@ -1,5 +1,6 @@
 """Research source models and Markdown report rendering."""
 
+from personal_stock_investment_system.research.analysis import analyze_research_source
 from personal_stock_investment_system.research.markdown import (
     build_research_report_filename,
     render_research_report,
@@ -41,6 +42,7 @@ __all__ = [
     "YouTubeImportResult",
     "YouTubeTranscriptSegment",
     "YouTubeVideoMetadata",
+    "analyze_research_source",
     "build_research_report_filename",
     "build_pdf_research_source",
     "build_youtube_research_source",
