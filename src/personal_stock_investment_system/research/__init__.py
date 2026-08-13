@@ -1,6 +1,12 @@
 """Research source models and Markdown report rendering."""
 
 from personal_stock_investment_system.research.analysis import analyze_research_source
+from personal_stock_investment_system.research.entrypoint import (
+    PhaseOneResearchInput,
+    PhaseOneResearchResult,
+    TranscriptUnavailableYouTubeClient,
+    run_phase_one_research_source_analysis,
+)
 from personal_stock_investment_system.research.markdown import (
     build_research_report_filename,
     render_research_report,
@@ -52,8 +58,11 @@ __all__ = [
     "YouTubeTranscriptSegment",
     "YouTubeVideoMetadata",
     "DEFAULT_OBSIDIAN_INBOX_PATH",
+    "PhaseOneResearchInput",
+    "PhaseOneResearchResult",
     "ResearchReportOutputDestination",
     "ResearchReportOutputSettings",
+    "TranscriptUnavailableYouTubeClient",
     "WrittenResearchReport",
     "analyze_research_source",
     "build_research_report_filename",
@@ -65,5 +74,6 @@ __all__ = [
     "pdf_to_markdown",
     "render_research_report",
     "resolve_research_report_output_destinations",
+    "run_phase_one_research_source_analysis",
     "write_research_report_outputs",
 ]

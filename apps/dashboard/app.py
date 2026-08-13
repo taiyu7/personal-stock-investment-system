@@ -6,6 +6,7 @@ from components.layout import render_global_styles, render_page_header, render_s
 from views.changelog import render_changelog_page
 from views.daily_review import render_daily_review_page
 from views.dashboard import render_dashboard_page
+from views.research_source_analysis import render_research_source_analysis_page
 from views.trade_concept import render_stock_concept_page
 
 
@@ -24,6 +25,8 @@ def main() -> None:
     if current_page == "市場交易儀表板":
         render_page_header(APP_VERSION, APP_LAST_UPDATED)
         render_dashboard_page()
+    elif current_page == "研究來源分析":
+        render_research_source_analysis_page()
     elif current_page == "每日復盤輸出":
         render_daily_review_page()
     elif current_page == "進銘的股價概念":
