@@ -20,6 +20,13 @@ from personal_stock_investment_system.research.sources import (
     TechnicalAnalysisNote,
     VerifiableHypothesis,
 )
+from personal_stock_investment_system.research.youtube import (
+    YouTubeImportResult,
+    YouTubeTranscriptSegment,
+    YouTubeVideoMetadata,
+    build_youtube_research_source,
+    parse_youtube_video_id,
+)
 
 __all__ = [
     "CompanyProfileNote",
@@ -31,9 +38,14 @@ __all__ = [
     "TechnicalAnalysisNote",
     "VerifiableHypothesis",
     "PdfPageText",
+    "YouTubeImportResult",
+    "YouTubeTranscriptSegment",
+    "YouTubeVideoMetadata",
     "build_research_report_filename",
     "build_pdf_research_source",
+    "build_youtube_research_source",
     "extract_text_pages",
+    "parse_youtube_video_id",
     "pdf_to_markdown",
     "render_research_report",
 ]
