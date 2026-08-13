@@ -299,6 +299,7 @@ Dockerfile 的 Python base image 以 digest 參照特定 image 內容；`python:
 2. **Phase 1.5：知識庫與開發環境隔離**：沿用既有 Obsidian vault，Docker 開發環境已可 build、測試與啟動 Dashboard。
 3. **Phase 1.6：自動化測試補強**：核心單元測試、Docker-based CI 與 Dashboard smoke test 已完成。
 4. **Phase 1.7：研究工具優先**：目前焦點是第一階段研究來源分析工具，支援公開影片、PDF 轉 Markdown、手動文字 fallback 與固定股票研究報告。
+   - 已完成 #12 研究來源資料模型與固定 Markdown 報告模型，以及 #13 PDF 轉 Markdown MVP。#13 目前支援 `builtin` fallback、PyMuPDF4LLM optional backend 與 `pdf-tools` Docker profile。
 5. **Phase 2：資料層 MVP**：Dashboard、yfinance、共用服務與 SQLite，核心功能已完成；ticker 資料完整性與歷史快照流程排在研究工具優先版之後。
 6. **Phase 3：MCP MVP**：建立唯讀 server，提供市場行情、市場摘要與每日復盤查詢。
 7. **Phase 4：回測 MVP**：建立策略介面、示範策略、績效統計與報告。

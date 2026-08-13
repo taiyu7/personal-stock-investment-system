@@ -48,6 +48,7 @@ title
 source_url
 publisher
 speaker
+speakers
 published_date
 collected_at
 language
@@ -64,7 +65,8 @@ notes
 - `title`：影片或 PDF 標題。
 - `source_url`：YouTube URL 或原始來源 URL；本機 PDF 可留空。
 - `publisher`：頻道、機構或發布者。
-- `speaker`：講者；未知時可留空。
+- `speaker`：單一講者或主持人；未知時可留空。
+- `speakers`：多位講者、來賓或研究員；例如電視節目可列主持人與多位來賓。
 - `published_date`：發布日期；未知時可留空。
 - `collected_at`：系統匯入日期。
 - `language`：例如 `zh-TW`。
@@ -326,6 +328,33 @@ src/personal_stock_investment_system/research/
 - `youtube.py`：公開 YouTube metadata 與可用文字來源匯入。
 - `analysis.py`：將 Markdown/text 轉成研究報告資料結構。
 - `markdown.py`：將研究報告資料結構輸出成 Markdown。
+
+## 目前實作狀態
+
+截至 2026-08-13，主 Repo `main` 已完成：
+
+- #12：`src/personal_stock_investment_system/research/sources.py` 定義 `ResearchSource`、`ResearchReport`、`SourceReference`、`StockOpinion`、`StockRelation`、`CompanyProfileNote`、`TechnicalAnalysisNote`、`VerifiableHypothesis`。
+- #12：`markdown.py` 可將 `ResearchReport` 轉成固定格式 Markdown，並支援多位 `speakers` 顯示為「講者／來賓」。
+- #12：`docs/research/sample-research-report.md` 提供人工驗收範例。
+- #13：`pdf.py` 提供 `pdf_to_markdown()`、`extract_text_pages()`、`build_pdf_research_source()`。
+- #13：PDF backend 支援 `builtin` 與 `pymupdf4llm`。`builtin` 是最小本地 fallback；`pymupdf4llm` 是 optional backend。
+- #13：`docker-compose.yml` 已新增 `pdf-tools` profile，可建立含 PyMuPDF4LLM 的獨立 Docker image，不拖重日常 `app` / `dashboard` image。
+
+已驗證：
+
+- `docker compose run --rm app pytest`：23 passed。
+- `docker compose --profile pdf-tools build pdf-tools`：成功。
+- `docker compose --profile pdf-tools run --rm pdf-tools`：顯示 `pymupdf4llm ready`。
+- `docker compose --profile pdf-tools run --rm pdf-tools pytest tests/test_pdf_research.py`：5 passed。
+
+尚未完成：
+
+- 使用真實投顧 PDF / 簡報 PDF 進行品質驗收。
+- OCR / 掃描 PDF 品質驗收。
+- YouTube 匯入與逐字稿 fallback。
+- 將 Markdown/text 轉成股票研究報告的分析流程。
+- 輸出到 Obsidian inbox / 自選路徑的設定。
+- Streamlit 或 CLI 入口。
 
 ## 建議資料模型
 

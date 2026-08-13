@@ -21,6 +21,9 @@ personal_stock_investment_system 共用核心
   ├─ config/watchlist.py
   ├─ market_data/provider.py
   ├─ market_data/service.py
+  ├─ research/sources.py
+  ├─ research/markdown.py
+  ├─ research/pdf.py
   ├─ signals/rules.py
   ├─ reviews.py
   └─ storage/daily_reviews.py
@@ -48,6 +51,9 @@ personal_stock_investment_system 共用核心
 - `config/watchlist.py`：預設觀察清單與市場區塊。
 - `market_data/provider.py`：行情來源 boundary；目前有 `YFinanceProvider`。
 - `market_data/service.py`：把 watchlist 與 provider 組成市場報告。
+- `research/sources.py`：研究來源、來源引用、股票觀點、公司業務、技術分析與可驗證假設資料模型。
+- `research/markdown.py`：固定格式研究來源分析報告 Markdown renderer。
+- `research/pdf.py`：PDF 轉 Markdown backend；目前支援 `builtin` fallback 與 `pymupdf4llm` optional backend。
 - `signals/rules.py`：偏多／中性／偏空透明規則，macro 區塊反向計分。
 - `reviews.py`：每日復盤 Markdown 與市場摘要文字。
 - `storage/daily_reviews.py`：SQLite 每日復盤 repository。
@@ -76,7 +82,7 @@ personal_stock_investment_system 共用核心
 
 ### 測試與 CI
 
-目前測試涵蓋 provider、market summary service、signal rules、daily review repository 與部分 Dashboard helper。
+目前測試涵蓋 provider、market summary service、signal rules、daily review repository、研究來源報告模型、PDF 轉 Markdown backend 與部分 Dashboard helper。
 
 CI 在 push 到 `main` 或建立 PR 時執行：
 
@@ -85,6 +91,14 @@ CI 在 push 到 `main` 或建立 PR 時執行：
 - `docker compose run --rm app pytest`。
 
 Docker 與 CI 使用固定 Python 版本、GitHub Actions SHA、Docker digest 與 `requirements.lock`，避免同一份提交在不同時間解析到不同依賴。
+
+進階 PDF 轉換使用獨立 Docker Compose profile：
+
+- `docker compose --profile pdf-tools build pdf-tools` 建立含 PyMuPDF4LLM 的 PDF 工具 image。
+- `docker compose --profile pdf-tools run --rm pdf-tools` 確認 backend ready。
+- `docker compose --profile pdf-tools run --rm pdf-tools pytest tests/test_pdf_research.py` 在 PDF 工具環境驗證 #13。
+
+日常 `app` / `dashboard` image 不安裝 PyMuPDF4LLM，避免重型 PDF 依賴拖慢一般開發流程。
 
 ## 目標架構
 
