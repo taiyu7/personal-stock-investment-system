@@ -42,3 +42,31 @@ services:
       - apps/dashboard/app.py
       - --server.address=0.0.0.0
       - --server.port=8501
+
+  pdf-tools:
+    profiles:
+      - pdf-tools
+    build:
+      context: .
+      args:
+        INSTALL_EXTRAS: pdf
+    image: personal-stock-investment-system-pdf-tools
+    working_dir: /app
+    environment:
+      APP_ENV: local
+      LOG_LEVEL: info
+      TIMEZONE: Asia/Taipei
+      DATABASE_URL: sqlite:///data/local/personal-stock-investment.db
+      ENABLE_LIVE_TRADING: "false"
+    volumes:
+      - ./src:/app/src
+      - ./apps:/app/apps
+      - ./tests:/app/tests
+      - ./docs:/app/docs
+      - ./data/local:/app/data/local
+      - ./data/raw:/app/data/raw
+      - ./data/processed:/app/data/processed
+    command:
+      - python
+      - -c
+      - "import pymupdf4llm; print('pymupdf4llm ready')"

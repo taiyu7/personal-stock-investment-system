@@ -181,6 +181,30 @@ docker compose run --rm app pytest
 
 Docker 中的 image 是可重複使用的執行環境範本；container 則是由 image 建立出來的一次執行個體。本專案會使用 `personal-stock-investment-system-dev` 作為開發 image，並以 Python 基底 image 組成它。`docker compose run --rm app pytest` 會建立暫時 container 跑測試，正常結束後會移除；Docker Desktop 裡看到 `Exited (0)` 的 container 則代表它已成功結束，並沒有持續執行。
 
+### PDF 工具 Docker profile
+
+進階 PDF 轉 Markdown 使用獨立的 `pdf-tools` profile，不會拖重日常 Dashboard 與核心測試 image。
+
+第一次建立 PDF 工具 image：
+
+```powershell
+docker compose --profile pdf-tools build pdf-tools
+```
+
+確認 PyMuPDF4LLM backend 可用：
+
+```powershell
+docker compose --profile pdf-tools run --rm pdf-tools
+```
+
+需要在 PDF 工具環境中執行 #13 測試時：
+
+```powershell
+docker compose --profile pdf-tools run --rm pdf-tools pytest tests/test_pdf_research.py
+```
+
+一般開發與 CI 仍使用 `docker compose run --rm app pytest`。
+
 ## 本機 Python fallback
 
 日常開發優先使用 Docker。只有在需要快速檢查或 Docker 不方便啟動時，才使用本機 Python。
@@ -242,6 +266,7 @@ pytest
 - 五日行情以前一交易日收盤價計算漲跌，以及 OHLC 欄位缺漏處理
 - 每日復盤的儲存、覆寫、讀回、尚未建立資料庫與 Markdown 格式
 - 研究來源資料模型與固定格式 Markdown 報告輸出
+- 文字型 PDF 轉 Markdown，並保留頁碼定位；可選用 PyMuPDF4LLM backend 處理進階 PDF
 - Dashboard 資料表的防呆邏輯
 - Streamlit Dashboard 啟動 smoke test
 
