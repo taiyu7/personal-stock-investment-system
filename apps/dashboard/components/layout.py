@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import streamlit as st
 
+SIDEBAR_PAGES = ("市場交易儀表板", "研究來源分析", "每日復盤輸出", "進銘的股價概念", "開發歷程")
+
 
 def render_global_styles() -> None:
     st.markdown(
@@ -64,7 +66,7 @@ def render_page_header(app_version: str, last_updated: str) -> None:
 def render_sidebar(current_page: str) -> str:
     selected_page = current_page
     with st.sidebar:
-        for page in ("市場交易儀表板", "每日復盤輸出", "進銘的股價概念", "開發歷程"):
+        for page in SIDEBAR_PAGES:
             if st.button(page, use_container_width=True):
                 selected_page = page
     return selected_page

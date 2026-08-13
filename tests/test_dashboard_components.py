@@ -1,5 +1,6 @@
 import pandas as pd
 
+from apps.dashboard.components.layout import SIDEBAR_PAGES
 from apps.dashboard.components.market_cards import get_recent_trading_rows
 
 
@@ -28,3 +29,8 @@ def test_recent_rows_returns_empty_when_required_price_columns_are_missing():
     rows = get_recent_trading_rows(history)
 
     assert rows.empty
+
+
+def test_research_source_analysis_is_available_from_sidebar_navigation():
+    assert "研究來源分析" in SIDEBAR_PAGES
+    assert SIDEBAR_PAGES.index("研究來源分析") == 1
