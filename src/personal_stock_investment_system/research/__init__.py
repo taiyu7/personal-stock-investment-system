@@ -5,6 +5,15 @@ from personal_stock_investment_system.research.markdown import (
     build_research_report_filename,
     render_research_report,
 )
+from personal_stock_investment_system.research.output import (
+    DEFAULT_OBSIDIAN_INBOX_PATH,
+    ResearchReportOutputDestination,
+    ResearchReportOutputSettings,
+    WrittenResearchReport,
+    default_custom_output_path,
+    resolve_research_report_output_destinations,
+    write_research_report_outputs,
+)
 from personal_stock_investment_system.research.pdf import (
     PdfPageText,
     build_pdf_research_source,
@@ -42,12 +51,19 @@ __all__ = [
     "YouTubeImportResult",
     "YouTubeTranscriptSegment",
     "YouTubeVideoMetadata",
+    "DEFAULT_OBSIDIAN_INBOX_PATH",
+    "ResearchReportOutputDestination",
+    "ResearchReportOutputSettings",
+    "WrittenResearchReport",
     "analyze_research_source",
     "build_research_report_filename",
     "build_pdf_research_source",
     "build_youtube_research_source",
+    "default_custom_output_path",
     "extract_text_pages",
     "parse_youtube_video_id",
     "pdf_to_markdown",
     "render_research_report",
+    "resolve_research_report_output_destinations",
+    "write_research_report_outputs",
 ]
