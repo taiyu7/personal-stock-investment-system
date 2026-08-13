@@ -12,7 +12,12 @@ COPY pyproject.toml README.md requirements.lock ./
 RUN python -m pip install --require-hashes -r requirements.lock
 
 COPY src ./src
-RUN python -m pip install --no-deps -e .
+ARG INSTALL_EXTRAS=""
+RUN if [ -n "$INSTALL_EXTRAS" ]; then \
+      python -m pip install -e ".[$INSTALL_EXTRAS]"; \
+    else \
+      python -m pip install --no-deps -e .; \
+    fi
 
 COPY apps ./apps
 COPY tests ./tests
