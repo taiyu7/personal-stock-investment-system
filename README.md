@@ -134,6 +134,7 @@ personal-stock-investment-system/
 ├── src/personal_stock_investment_system/  # 共用 Python 核心套件
 │   ├── config/                            # 觀察清單設定
 │   ├── market_data/                       # Provider、行情模型與摘要服務
+│   ├── research/                          # 研究來源資料模型與 Markdown 報告
 │   ├── signals/                           # 偏多／中性／偏空規則引擎
 │   └── storage/                           # SQLite 每日復盤 Repository
 ├── data/                                  # 本機資料；內容不提交 Git
@@ -240,6 +241,7 @@ pytest
 - 市場摘要、總經反向計分與資料不足時的中性判斷
 - 五日行情以前一交易日收盤價計算漲跌，以及 OHLC 欄位缺漏處理
 - 每日復盤的儲存、覆寫、讀回、尚未建立資料庫與 Markdown 格式
+- 研究來源資料模型與固定格式 Markdown 報告輸出
 - Dashboard 資料表的防呆邏輯
 - Streamlit Dashboard 啟動 smoke test
 
