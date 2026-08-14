@@ -18,6 +18,13 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
 pdf = ["pymupdf4llm>=0.0.27"]
+asr = [
+    "accelerate>=1.0",
+    "datasets[audio]>=3.0",
+    "openai-whisper @ git+https://github.com/Splend1d/whisper-patch-breeze.git@f94c6ba670a35ee8d720d4221e102f4685c288d6",
+    "torch>=2.3",
+    "transformers>=4.45",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

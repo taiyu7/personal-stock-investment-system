@@ -27,6 +27,8 @@ pnpm-lock.yaml
 # Reports and temp outputs
 /backtesting/reports/*
 !/backtesting/reports/.gitkeep
+/tools/external/*
+!/tools/external/.gitkeep
 .tmp/
 .yfinance-cache/
 .streamlit/secrets.toml
