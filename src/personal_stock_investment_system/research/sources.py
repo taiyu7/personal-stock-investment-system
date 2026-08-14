@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Literal
 from uuid import uuid4
 
-SourceType = Literal["youtube_public", "pdf", "manual_text"]
+SourceType = Literal["youtube_public", "pdf", "manual_text", "local_audio", "local_video"]
 LocatorType = Literal["timestamp", "page", "section", "unknown"]
 OpinionDirection = Literal["偏多", "偏空", "中性", "未判定"]
 SourceImportStatus = Literal[

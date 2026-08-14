@@ -70,3 +70,34 @@ services:
       - python
       - -c
       - "import pymupdf4llm; print('pymupdf4llm ready')"
+
+  asr-tools:
+    profiles:
+      - asr-tools
+    build:
+      context: .
+      args:
+        INSTALL_APT_PACKAGES: ffmpeg git
+        INSTALL_EXTRAS: asr
+    image: personal-stock-investment-system-asr-tools
+    working_dir: /app
+    environment:
+      APP_ENV: local
+      LOG_LEVEL: info
+      TIMEZONE: Asia/Taipei
+      DATABASE_URL: sqlite:///data/local/personal-stock-investment.db
+      ENABLE_LIVE_TRADING: "false"
+    volumes:
+      - ./src:/app/src
+      - ./apps:/app/apps
+      - ./tests:/app/tests
+      - ./docs:/app/docs
+      - ./data/local:/app/data/local
+      - ./data/raw:/app/data/raw
+      - ./data/processed:/app/data/processed
+      - ./data/local/asr-cache:/root/.cache
+      - ./tools/external:/app/tools/external
+    command:
+      - python
+      - -c
+      - "import accelerate, datasets, torch, transformers; print('asr dependencies ready')"

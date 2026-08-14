@@ -1,6 +1,15 @@
 """Research source models and Markdown report rendering."""
 
 from personal_stock_investment_system.research.analysis import analyze_research_source
+from personal_stock_investment_system.research.asr import (
+    DEFAULT_BREEZE_ASR_MODEL,
+    AsrTranscriptSegment,
+    AsrTranscriptionResult,
+    BreezeAsrCliConfig,
+    BreezeAsrCliTranscriber,
+    SpeechToTextClient,
+    build_local_audio_research_source,
+)
 from personal_stock_investment_system.research.entrypoint import (
     PhaseOneResearchInput,
     PhaseOneResearchResult,
@@ -58,6 +67,11 @@ __all__ = [
     "TechnicalAnalysisNote",
     "VerifiableHypothesis",
     "PdfPageText",
+    "DEFAULT_BREEZE_ASR_MODEL",
+    "AsrTranscriptSegment",
+    "AsrTranscriptionResult",
+    "BreezeAsrCliConfig",
+    "BreezeAsrCliTranscriber",
     "YouTubeImportResult",
     "YouTubeTranscriptSegment",
     "YouTubeVideoMetadata",
@@ -66,10 +80,12 @@ __all__ = [
     "PhaseOneResearchResult",
     "ResearchReportOutputDestination",
     "ResearchReportOutputSettings",
+    "SpeechToTextClient",
     "TranscriptUnavailableYouTubeClient",
     "WrittenResearchReport",
     "analyze_research_source",
     "build_research_report_filename",
+    "build_local_audio_research_source",
     "build_pdf_research_source",
     "build_youtube_research_source",
     "default_custom_output_path",

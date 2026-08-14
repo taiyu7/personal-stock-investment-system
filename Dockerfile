@@ -8,6 +8,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+ARG INSTALL_APT_PACKAGES=""
+RUN if [ -n "$INSTALL_APT_PACKAGES" ]; then \
+      apt-get update && \
+      apt-get install -y --no-install-recommends $INSTALL_APT_PACKAGES && \
+      rm -rf /var/lib/apt/lists/*; \
+    fi
+
 COPY pyproject.toml README.md requirements.lock ./
 RUN python -m pip install --require-hashes -r requirements.lock
 

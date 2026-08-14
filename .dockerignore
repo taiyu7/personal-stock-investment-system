@@ -18,6 +18,7 @@ data/processed/*
 data/external/*
 data/local/*
 backtesting/reports/*
+tools/external/*
 
 node_modules/
 npm-debug.log*

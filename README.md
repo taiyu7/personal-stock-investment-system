@@ -208,6 +208,28 @@ docker compose --profile pdf-tools run --rm pdf-tools pytest tests/test_pdf_rese
 
 一般開發與 CI 仍使用 `docker compose run --rm app pytest`。
 
+### ASR 工具 Docker profile
+
+Breeze-ASR-25 使用獨立的 `asr-tools` profile，不會拖重日常 Dashboard 與核心測試 image。第一次建立 ASR 工具 image：
+
+```powershell
+docker compose --profile asr-tools build asr-tools
+```
+
+確認 ASR dependencies 可用：
+
+```powershell
+docker compose --profile asr-tools run --rm asr-tools
+```
+
+本機音訊測試可先把檔案放到 `data/raw/asr-samples/`，再輸出逐字稿到 `data/processed/asr-transcripts/`：
+
+```powershell
+docker compose --profile asr-tools run --rm asr-tools whisper data/raw/asr-samples/sample.mp3 --model breeze-asr-25 --output_format json --output_dir data/processed/asr-transcripts --language Chinese
+```
+
+Breeze-ASR-25 會下載大型模型快取；本專案將 ASR cache 掛載到 `data/local/asr-cache/`，不會提交 Git。若 Whisper 產出的 JSON 顯示為 `\uXXXX` escape，研究工具的 ASR adapter 會在讀取後重新寫成可讀 UTF-8 JSON。
+
 ## 本機 Python fallback
 
 日常開發優先使用 Docker。只有在需要快速檢查或 Docker 不方便啟動時，才使用本機 Python。
@@ -272,6 +294,7 @@ pytest
 - 研究來源通用 import status/result 邊界
 - 文字型 PDF 轉 Markdown，並保留頁碼定位；可選用 PyMuPDF4LLM backend 處理進階 PDF
 - 公開 YouTube URL 解析、逐字稿 fallback 狀態與 fake/mock 字幕 adapter 測試
+- 本機音訊 ASR adapter 的 fake/mock 轉錄、Whisper JSON 解析與 UTF-8 正規化
 - 固定文字逐字稿轉成股票研究報告，包含人物觀點、族群關聯、公司業務、技術分析、假設、風險與待查問題
 - 研究報告輸出目的地設定，可輸出到 Obsidian inbox、自選路徑，或不寫入本機檔案
 - 第一階段研究來源分析入口，支援手動文字、PDF 前處理、YouTube fallback 狀態與暫存輸出目的地測試
