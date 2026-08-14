@@ -50,6 +50,8 @@
 
 核心分析流程不應直接依賴任何單一平台或登入方式。所有 adapter 都應回傳明確狀態，而不是讓流程假裝成功。
 
+2026-08-14 更新：#24 已完成第一步 adapter 邊界小重構。核心模型已新增通用來源匯入狀態與 `ResearchSourceImportResult`，YouTube fallback 與 phase-one entrypoint 已改用此結果結構，同時維持 #12 至 #17 既有行為。
+
 ## 狀態分類
 
 影音匯入流程至少應能回傳：

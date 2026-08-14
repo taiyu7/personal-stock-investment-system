@@ -10,6 +10,16 @@ from uuid import uuid4
 SourceType = Literal["youtube_public", "pdf", "manual_text"]
 LocatorType = Literal["timestamp", "page", "section", "unknown"]
 OpinionDirection = Literal["偏多", "偏空", "中性", "未判定"]
+SourceImportStatus = Literal[
+    "available",
+    "manual_fallback",
+    "transcript_unavailable",
+    "login_required",
+    "unsupported_source",
+    "media_unavailable",
+    "caption_language_unavailable",
+    "capture_unavailable",
+]
 
 
 def new_source_id(prefix: str = "src") -> str:
@@ -41,6 +51,18 @@ class ResearchSource:
         if self.speakers:
             return "、".join(speaker for speaker in self.speakers if speaker.strip())
         return self.speaker
+
+
+@dataclass(frozen=True)
+class ResearchSourceImportResult:
+    source: ResearchSource
+    status: SourceImportStatus
+    source_identifier: str = ""
+    status_message: str = ""
+    error: str = ""
+
+    def is_available(self) -> bool:
+        return self.status in {"available", "manual_fallback"}
 
 
 @dataclass(frozen=True)

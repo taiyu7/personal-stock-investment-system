@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Literal, Protocol
 from urllib.parse import parse_qs, urlparse
 
-from personal_stock_investment_system.research.sources import ResearchSource
+from personal_stock_investment_system.research.sources import ResearchSource, ResearchSourceImportResult, SourceImportStatus
 
 TranscriptStatus = Literal["available", "manual_fallback", "transcript_unavailable"]
 
@@ -42,8 +42,18 @@ class YouTubeTranscriptSegment:
 class YouTubeImportResult:
     source: ResearchSource
     video_id: str
-    transcript_status: TranscriptStatus
-    transcript_error: str = ""
+    import_result: ResearchSourceImportResult
+
+    @property
+    def transcript_status(self) -> TranscriptStatus:
+        status = self.import_result.status
+        if status in {"available", "manual_fallback", "transcript_unavailable"}:
+            return status
+        return "transcript_unavailable"
+
+    @property
+    def transcript_error(self) -> str:
+        return self.import_result.error
 
 
 class YouTubePublicClient(Protocol):
@@ -106,11 +116,17 @@ def build_youtube_research_source(
         source_locator=source_locator,
         notes=notes,
     )
+    import_result = ResearchSourceImportResult(
+        source=source,
+        status=transcript_status,
+        source_identifier=source_locator,
+        status_message=_status_message(transcript_status),
+        error=transcript_error,
+    )
     return YouTubeImportResult(
         source=source,
         video_id=video_id,
-        transcript_status=transcript_status,
-        transcript_error=transcript_error,
+        import_result=import_result,
     )
 
 
@@ -183,3 +199,13 @@ def _notes(optional_notes: str, transcript_status: TranscriptStatus, transcript_
     if transcript_error:
         parts.append(f"transcript_error={transcript_error}")
     return "\n".join(parts)
+
+
+def _status_message(transcript_status: SourceImportStatus) -> str:
+    if transcript_status == "available":
+        return "YouTube 公開逐字稿可用。"
+    if transcript_status == "manual_fallback":
+        return "未取得公開逐字稿，使用手動文字 fallback。"
+    if transcript_status == "transcript_unavailable":
+        return "未取得公開逐字稿，且尚未提供手動文字。"
+    return f"YouTube 匯入狀態：{transcript_status}"

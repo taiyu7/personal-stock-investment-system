@@ -11,7 +11,7 @@ from personal_stock_investment_system.research.analysis import analyze_research_
 from personal_stock_investment_system.research.markdown import render_research_report
 from personal_stock_investment_system.research.output import ResearchReportOutputSettings, WrittenResearchReport, write_research_report_outputs
 from personal_stock_investment_system.research.pdf import build_pdf_research_source
-from personal_stock_investment_system.research.sources import ResearchReport, ResearchSource
+from personal_stock_investment_system.research.sources import ResearchReport, ResearchSource, ResearchSourceImportResult
 from personal_stock_investment_system.research.youtube import (
     YouTubePublicClient,
     YouTubeTranscriptSegment,
@@ -42,6 +42,7 @@ class PhaseOneResearchResult:
     source: ResearchSource
     report: ResearchReport
     markdown: str
+    import_result: ResearchSourceImportResult
     written_outputs: tuple[WrittenResearchReport, ...] = ()
     statuses: tuple[str, ...] = ()
 
@@ -67,7 +68,11 @@ def run_phase_one_research_source_analysis(
     report_date: date | None = None,
 ) -> PhaseOneResearchResult:
     statuses: list[str] = []
-    source = _build_source(source_input, youtube_client=youtube_client, statuses=statuses)
+    import_result = _build_source_import_result(source_input, youtube_client=youtube_client)
+    source = import_result.source
+    statuses.append(import_result.status_message)
+    if source_input.input_kind == "youtube_public" and import_result.status == "transcript_unavailable":
+        statuses.append("未取得公開逐字稿，請手動貼上逐字稿或摘要後再分析。")
     report = analyze_research_source(source)
     markdown = render_research_report(report)
     written_outputs = write_research_report_outputs(
@@ -80,19 +85,26 @@ def run_phase_one_research_source_analysis(
         statuses.append(f"已輸出 {len(written_outputs)} 份 Markdown。")
     else:
         statuses.append("未輸出本機檔案，可在介面顯示或提供一次性下載。")
-    return PhaseOneResearchResult(source=source, report=report, markdown=markdown, written_outputs=written_outputs, statuses=tuple(statuses))
+    return PhaseOneResearchResult(
+        source=source,
+        report=report,
+        markdown=markdown,
+        import_result=import_result,
+        written_outputs=written_outputs,
+        statuses=tuple(statuses),
+    )
 
 
-def _build_source(
+def _build_source_import_result(
     source_input: PhaseOneResearchInput,
     *,
     youtube_client: YouTubePublicClient | None,
-    statuses: list[str],
-) -> ResearchSource:
+) -> ResearchSourceImportResult:
     if source_input.input_kind == "manual_text":
+        status_message = "手動文字來源可用。"
         if not source_input.manual_text.strip():
-            statuses.append("手動文字為空，分析結果會標記為未判定。")
-        return ResearchSource(
+            status_message = "手動文字為空，分析結果會標記為未判定。"
+        source = ResearchSource(
             source_type="manual_text",
             title=source_input.title or "手動研究文字",
             source_url=source_input.source_url,
@@ -103,6 +115,12 @@ def _build_source(
             raw_text=source_input.manual_text.strip(),
             markdown_text=source_input.manual_text.strip(),
             notes=source_input.notes,
+        )
+        return ResearchSourceImportResult(
+            source=source,
+            status="manual_fallback",
+            source_identifier="manual_text",
+            status_message=status_message,
         )
     if source_input.input_kind == "pdf":
         if source_input.pdf_path is None:
@@ -117,11 +135,17 @@ def _build_source(
             published_date=source_input.published_date,
             notes=source_input.notes,
         )
+        status = "available"
+        status_message = "PDF to Markdown 前處理完成。"
         if not source.raw_text.strip():
-            statuses.append("PDF 未抽取到文字，後續分析會標記為未判定或待查證。")
-        else:
-            statuses.append("PDF to Markdown 前處理完成。")
-        return source
+            status = "media_unavailable"
+            status_message = "PDF 未抽取到文字，後續分析會標記為未判定或待查證。"
+        return ResearchSourceImportResult(
+            source=source,
+            status=status,
+            source_identifier=str(source_input.pdf_path),
+            status_message=status_message,
+        )
     if source_input.input_kind == "youtube_public":
         if not source_input.youtube_url.strip():
             raise ValueError("YouTube input requires youtube_url.")
@@ -138,8 +162,12 @@ def _build_source(
             optional_speaker=source_input.speaker,
             optional_notes=source_input.notes,
         )
-        statuses.append(f"YouTube 逐字稿狀態：{result.transcript_status}")
-        if result.transcript_status == "transcript_unavailable":
-            statuses.append("未取得公開逐字稿，請手動貼上逐字稿或摘要後再分析。")
-        return result.source
+        status_message = f"YouTube 逐字稿狀態：{result.transcript_status}"
+        return ResearchSourceImportResult(
+            source=result.source,
+            status=result.import_result.status,
+            source_identifier=result.import_result.source_identifier,
+            status_message=status_message,
+            error=result.import_result.error,
+        )
     raise ValueError(f"Unsupported input kind: {source_input.input_kind}")
