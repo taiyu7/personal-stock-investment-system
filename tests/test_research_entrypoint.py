@@ -21,6 +21,8 @@ def test_manual_text_entrypoint_produces_research_report_without_local_output():
     )
 
     assert result.source.source_type == "manual_text"
+    assert result.import_result.status == "manual_fallback"
+    assert result.import_result.source_identifier == "manual_text"
     assert "## 人物對股票的評價" in result.markdown
     assert "| 研究員 A | 2330 | 台積電 | 偏多 |" in result.markdown
     assert result.written_outputs == ()
@@ -38,6 +40,7 @@ def test_pdf_entrypoint_completes_pdf_to_markdown_preprocessing(tmp_path):
     )
 
     assert result.source.source_type == "pdf"
+    assert result.import_result.status == "available"
     assert "PDF to Markdown 前處理完成。" in result.statuses
     assert "## 第 1 頁" in result.source.markdown_text
     assert "2330 TSMC AI server demand" in result.source.raw_text
@@ -55,6 +58,8 @@ def test_youtube_entrypoint_shows_transcript_unavailable_fallback():
     )
 
     assert result.source.source_type == "youtube_public"
+    assert result.import_result.status == "transcript_unavailable"
+    assert result.import_result.source_identifier == "youtube:dQw4w9WgXcQ"
     assert result.source.raw_text == ""
     assert "YouTube 逐字稿狀態：transcript_unavailable" in result.statuses
     assert "未取得公開逐字稿" in "\n".join(result.statuses)

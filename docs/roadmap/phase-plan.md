@@ -49,6 +49,7 @@ Docker 開發環境完成後，先補強自動化測試，再開始搭建後續�
 自動化測試穩定後，優先搭建直接支援投資研究的工具。這裡的「工具」優先指盡職調查、財報分析與影片分析，不是 MCP 或回測底層。
 
 - [ ] 補真實 YouTube CC / automatic captions adapter，支援公開字幕匯入、語言選擇與清楚錯誤狀態
+- [x] #24 重構研究來源 adapter 邊界，建立通用 import status/result，供後續 YouTube、本機影音、podcast 與截圖 adapter 共用
 - [ ] 設計 YouTube 會員影片 / 受限制影音來源的合法取得流程；待使用者提供既有登入或素材取得機制後再細化
 - [ ] 建立本機影片 / 音訊檔匯入與語音轉文字流程
 - [ ] 建立 podcast 音頻匯入流程，先支援本機音訊，再評估 RSS / episode URL
@@ -70,6 +71,7 @@ Docker 開發環境完成後，先補強自動化測試，再開始搭建後續�
 ### Phase 1.7 目前限制
 
 - YouTube：目前入口會解析公開 URL 並顯示 `transcript_unavailable` fallback；尚未實際抓取 YouTube CC 或 automatic captions。
+- Adapter 邊界：已建立通用 import status/result，可表達 `available`、`manual_fallback`、`transcript_unavailable`、`login_required`、`unsupported_source`、`media_unavailable`、`caption_language_unavailable` 與 `capture_unavailable`。
 - 影音來源：本機影片、本機音訊、podcast、會員影片與技術分析圖面截圖尚未實作；完整規劃見 `docs/research/media-source-ingestion-roadmap.md`。
 - 會員影片：不先假設 cookie 或瀏覽器 session；待使用者提供既有登入 / 爬蟲 / 取得素材機制後，再設計 adapter 與合法邊界。
 - PDF：文字型 PDF 已有 builtin fallback；進階 PDF 可用 `pdf-tools` profile 的 PyMuPDF4LLM backend，但仍需真實投顧 PDF / 簡報 PDF 品質驗收。

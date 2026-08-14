@@ -58,6 +58,7 @@ personal_stock_investment_system 共用核心
 - `market_data/provider.py`：行情來源 boundary；目前有 `YFinanceProvider`。
 - `market_data/service.py`：把 watchlist 與 provider 組成市場報告。
 - `research/sources.py`：研究來源、來源引用、股票觀點、公司業務、技術分析與可驗證假設資料模型。
+- `research/sources.py`：同時定義通用來源匯入狀態與 `ResearchSourceImportResult`，供不同 adapter 回傳一致結果。
 - `research/markdown.py`：固定格式研究來源分析報告 Markdown renderer。
 - `research/pdf.py`：PDF 轉 Markdown backend；目前支援 `builtin` fallback 與 `pymupdf4llm` optional backend。
 - `research/youtube.py`：公開 YouTube URL 解析、metadata/transcript adapter 介面與手動文字 fallback 狀態。
@@ -92,7 +93,7 @@ personal_stock_investment_system 共用核心
 
 ### 測試與 CI
 
-目前測試涵蓋 provider、market summary service、signal rules、daily review repository、研究來源報告模型、PDF 轉 Markdown backend、YouTube fallback adapter、研究分析器、輸出目的地、第一階段入口與部分 Dashboard helper。
+目前測試涵蓋 provider、market summary service、signal rules、daily review repository、研究來源報告模型、通用來源匯入狀態、PDF 轉 Markdown backend、YouTube fallback adapter、研究分析器、輸出目的地、第一階段入口與部分 Dashboard helper。
 
 CI 在 push 到 `main` 或建立 PR 時執行：
 

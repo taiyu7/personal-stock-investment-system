@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from personal_stock_investment_system.research import (
+    ResearchSourceImportResult,
     YouTubeTranscriptSegment,
     YouTubeVideoMetadata,
     build_youtube_research_source,
@@ -42,6 +43,10 @@ def test_youtube_research_source_uses_public_metadata_and_transcript():
 
     assert result.video_id == "dQw4w9WgXcQ"
     assert result.transcript_status == "available"
+    assert isinstance(result.import_result, ResearchSourceImportResult)
+    assert result.import_result.status == "available"
+    assert result.import_result.is_available()
+    assert result.import_result.source_identifier == "youtube:dQw4w9WgXcQ;timestamps:01:23-"
     assert result.source.source_type == "youtube_public"
     assert result.source.title == "AI 伺服器與台股供應鏈"
     assert result.source.publisher == "公開財經頻道"
@@ -66,6 +71,8 @@ def test_youtube_research_source_supports_manual_text_fallback():
     )
 
     assert result.transcript_status == "manual_fallback"
+    assert result.import_result.status == "manual_fallback"
+    assert result.import_result.is_available()
     assert result.transcript_error == "captions disabled"
     assert result.source.speaker == "分析師 A"
     assert result.source.raw_text == "使用者手動貼上的影片重點。"
@@ -82,6 +89,9 @@ def test_youtube_research_source_marks_transcript_unavailable_without_forcing_an
     result = build_youtube_research_source("https://www.youtube.com/watch?v=dQw4w9WgXcQ", client=client)
 
     assert result.transcript_status == "transcript_unavailable"
+    assert result.import_result.status == "transcript_unavailable"
+    assert not result.import_result.is_available()
+    assert result.import_result.status_message == "未取得公開逐字稿，且尚未提供手動文字。"
     assert result.source.raw_text == ""
     assert "transcript_unavailable：未取得公開逐字稿" in result.source.markdown_text
     assert result.source.notes == "transcript_status=transcript_unavailable"
