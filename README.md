@@ -396,3 +396,25 @@ Dockerfile 的 Python base image 以 digest 參照特定 image 內容；`python:
 ## 安全邊界
 
 目前不實作券商 API、自動下單、實盤交易或完整全市場資料倉。所有交易結論都應由使用者自行確認；系統現階段定位為研究、記錄與決策輔助工具。
+
+## Browser Session Media Acquisition
+
+#47 新增 `research.media` adapter，用來銜接需要瀏覽器 session 才能取得媒體請求的研究來源。核心流程是：
+
+```text
+Chrome performance log / browser session
+  -> m3u8 or media request discovery
+  -> yt-dlp download
+  -> FFmpeg 16 kHz mono WAV
+  -> OpenVINO ASR adapter
+```
+
+目前已提供可測的邊界與預設下載/轉檔 adapter：
+
+- `ChromePerformanceLogMediaDiscovery`
+- `SeleniumBrowserMediaDiscovery`
+- `YtDlpMediaDownloader`
+- `FfmpegAudioPreprocessor`
+- `BrowserSessionMediaAcquirer`
+
+實際使用時，建議依設備與來源選擇路線：有 Intel Arc / Core Ultra Arc GPU 的 Windows 本機可接 #45 OpenVINO GPU FP32；沒有 Intel GPU 或在 Docker 內執行時，應視為 CPU fallback 或只跑下載/前處理測試。瀏覽器 session 部分可使用既有 Chrome profile 取得當下有效的 media request，不保存短效 m3u8 當作長期資料。

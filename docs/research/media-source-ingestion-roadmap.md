@@ -15,10 +15,12 @@
    - 純核心測試使用 fake/mock；真實 YouTube 驗收放 integration，不混入一般單元測試。
 
 2. **YouTube 會員影片 / 受限制影片**
-   - 這類來源需要等使用者提供既有登入或素材取得機制後再設計。
-   - 不先假設 cookie、瀏覽器 session、token 或特定下載方式。
-   - 若使用瀏覽器登入狀態或既有爬蟲機制，必須明確記錄合法取得邊界、資料保存邊界與失敗狀態。
-   - 不繞過付費牆、帳號權限、DRM 或平台限制；工具只分析使用者有權存取且合法取得的素材。
+   - 參考舊 Selenium crawler：`C:\Github\Python Selenium Crawler\seleniumScreenShot-fullPageAndYoutubeAndm3u8.py`。
+   - 不再把流程設計成反覆手動更新 cookie 或長期保存 m3u8。
+   - 使用專用 Chrome profile 或既有瀏覽器 session，進頁面後即時嗅探 m3u8 / media request。
+   - 嗅探到短效 m3u8 後立刻交給 yt-dlp / ffmpeg 下載，不把短效 URL 當長期資料保存。
+   - 輸出影片 / 音訊 artifact 到 `data/raw/`，再交給 FFmpeg 轉 16kHz mono WAV。
+   - 以 #47 追蹤 Browser Session 媒體取得流程。
 
 3. **本機影片 / 音訊匯入**
    - 支援使用者提供本機影片檔或音訊檔路徑。
@@ -47,10 +49,15 @@
 - `speech-to-text adapter`：將音訊轉成逐字稿。
 - `frame capture adapter`：依時間戳擷取影片畫面。
 - `restricted source adapter`：受限制來源的合法取得流程；待使用者提供既有機制後設計。
+- `browser session provider`：管理專用 Chrome profile 或既有瀏覽器 session，避免每次手動匯出 cookie。
+- `media discovery adapter`：打開頁面、觸發播放、從 browser performance log 即時取得 m3u8 / media request。
+- `download adapter`：用 yt-dlp / ffmpeg 下載剛嗅探到的媒體 artifact。
 
 核心分析流程不應直接依賴任何單一平台或登入方式。所有 adapter 都應回傳明確狀態，而不是讓流程假裝成功。
 
 2026-08-14 更新：#24 已完成第一步 adapter 邊界小重構。核心模型已新增通用來源匯入狀態與 `ResearchSourceImportResult`，YouTube fallback 與 phase-one entrypoint 已改用此結果結構，同時維持 #12 至 #17 既有行為。
+
+2026-08-16 更新：已開 #47，目標是把舊 Selenium crawler 的瀏覽器 session / m3u8 嗅探能力拆成正式 media acquisition flow。設計重點是不保存短效 m3u8，而是每次下載當下進頁面嗅探最新 media URL，立刻下載並輸出 artifact，後續接 #45 OpenVINO ASR adapter。
 
 ## 狀態分類
 
@@ -78,3 +85,45 @@
 - 技術分析圖面時間戳截圖 MVP。
 - Podcast 音頻來源匯入。
 - 會員影片 / 受限制影音來源合法取得流程設計。
+- Browser Session 媒體取得流程：即時嗅探 m3u8 並交給 ASR pipeline（#47）。
+
+## #47 Browser Session Media Acquisition Adapter
+
+2026-08-16 實作第一版 adapter 邊界，目標是把舊 Selenium crawler 裡「瀏覽器 performance log 嗅探 m3u8」的能力，收斂成可測、可替換的 research media pipeline：
+
+```text
+browser session / Chrome performance log
+  -> extract m3u8 or media request
+  -> yt-dlp download adapter
+  -> FFmpeg 16 kHz mono WAV adapter
+  -> #45 OpenVINO ASR adapter
+```
+
+已新增程式：
+
+- `src/personal_stock_investment_system/research/media.py`
+  - `DiscoveredMediaRequest`
+  - `MediaArtifact`
+  - `MediaAcquisitionResult`
+  - `ChromePerformanceLogMediaDiscovery`
+  - `SeleniumBrowserMediaDiscovery`
+  - `SeleniumBrowserSessionConfig`
+  - `YtDlpMediaDownloader`
+  - `FfmpegAudioPreprocessor`
+  - `BrowserSessionMediaAcquirer`
+- `tests/test_media_acquisition.py`
+  - 測試 Chrome performance log m3u8 擷取。
+  - 測試 stream manifest 選取。
+  - 測試 browser session media acquisition orchestration。
+  - 測試 yt-dlp / ffmpeg shell-free command construction。
+
+目前這一版已提供 `SeleniumBrowserMediaDiscovery` 作為真正開啟既有 Chrome profile 的 discovery client；Selenium runtime 採延遲 import，因此一般單元測試不需要安裝瀏覽器工具。下一步是把這個 discovery client 接成 CLI / entrypoint，讓 URL 可以一路產生 WAV path，再交給 #45 OpenVINO ASR adapter。
+
+驗證結果：
+
+```powershell
+python -m compileall src\personal_stock_investment_system\research tests\test_media_acquisition.py
+docker compose run --rm app pytest tests/test_media_acquisition.py tests/test_asr_research.py
+```
+
+Docker 測試結果：`16 passed`。
