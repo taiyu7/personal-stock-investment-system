@@ -257,6 +257,33 @@ Docker 環境
 
 OpenVINO 本機環境、模型與 cache 都放在 `data/local/`，不提交 Git。實作 adapter 時應加入 backend 偵測：能看到 OpenVINO `GPU` 時使用 OpenVINO GPU FP32；否則退回 Breeze-ASR-25 CPU CLI adapter。詳細實測紀錄請見 `docs/research/asr-hardware-acceleration-phase-a.md`。
 
+OpenVINO ASR adapter 的核心入口是：
+
+```python
+from pathlib import Path
+
+from personal_stock_investment_system.research import (
+    OpenVINOAsrConfig,
+    OpenVINOAsrTranscriber,
+    build_local_audio_research_source,
+)
+
+transcriber = OpenVINOAsrTranscriber(
+    OpenVINOAsrConfig(
+        model_dir=Path("data/local/openvino/breeze-asr-25-fp32"),
+        device="GPU",
+        output_dir=Path("data/processed/asr-transcripts/openvino"),
+    )
+)
+result = build_local_audio_research_source(
+    "data/raw/asr-samples/sample2-60s-16k-mono.wav",
+    client=transcriber,
+    title="投顧節目片段",
+)
+```
+
+目前 OpenVINO adapter 預期輸入為 PCM WAV；若來源是 MP3 或影片，請先用 FFmpeg 轉成 16kHz mono WAV。後續影片 / 連結流程會在素材合法取得後，先下載或抽取音訊，再交給 OpenVINO ASR adapter。
+
 ## 本機 Python fallback
 
 日常開發優先使用 Docker。只有在需要快速檢查或 Docker 不方便啟動時，才使用本機 Python。

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import wave
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -113,6 +114,97 @@ class BreezeAsrCliTranscriber:
         )
 
 
+@dataclass(frozen=True)
+class OpenVINOAsrConfig:
+    model_dir: Path
+    device: str = "GPU"
+    output_dir: Path | None = None
+    language: str = "zh"
+    task: str = "transcribe"
+
+
+class OpenVINOTranscriptionRunner(Protocol):
+    def transcribe(self, audio_path: Path) -> str:
+        """Transcribe an audio file using an OpenVINO-backed ASR model."""
+
+
+class OpenVINOAsrTranscriber:
+    """Run an OpenVINO-exported Breeze-ASR-25 model and return ASR segments."""
+
+    def __init__(self, config: OpenVINOAsrConfig, runner: OpenVINOTranscriptionRunner | None = None) -> None:
+        self.config = config
+        self._runner = runner
+
+    def transcribe(self, audio_path: Path) -> AsrTranscriptionResult:
+        resolved_audio_path = audio_path.expanduser().resolve()
+        if not resolved_audio_path.exists():
+            return AsrTranscriptionResult(
+                segments=(),
+                status="media_unavailable",
+                status_message="音訊檔不存在，無法執行 OpenVINO ASR。",
+                error=str(resolved_audio_path),
+            )
+
+        model_dir = self.config.model_dir.expanduser().resolve()
+        if self._runner is None and not model_dir.exists():
+            return AsrTranscriptionResult(
+                segments=(),
+                status="unsupported_source",
+                status_message="找不到 OpenVINO ASR 模型目錄。",
+                error=str(model_dir),
+            )
+
+        output_dir = (self.config.output_dir or resolved_audio_path.parent / "openvino-transcripts").expanduser().resolve()
+        output_dir.mkdir(parents=True, exist_ok=True)
+        transcript_path = output_dir / f"{resolved_audio_path.stem}.json"
+
+        try:
+            text = (self._runner or _OpenVINOAsrRunner(self.config)).transcribe(resolved_audio_path).strip()
+        except ImportError as error:
+            return AsrTranscriptionResult(
+                segments=(),
+                status="unsupported_source",
+                status_message="尚未安裝 OpenVINO ASR 工具環境。",
+                error=str(error),
+            )
+        except wave.Error as error:
+            return AsrTranscriptionResult(
+                segments=(),
+                status="unsupported_source",
+                status_message="OpenVINO ASR 目前只支援 PCM WAV 音訊；請先將音訊轉成 16kHz mono WAV。",
+                error=str(error),
+            )
+        except Exception as error:
+            return AsrTranscriptionResult(
+                segments=(),
+                status="transcript_unavailable",
+                status_message="OpenVINO ASR 轉錄失敗。",
+                error=str(error),
+            )
+
+        if not text:
+            return AsrTranscriptionResult(
+                segments=(),
+                transcript_path=transcript_path,
+                status="transcript_unavailable",
+                status_message="OpenVINO ASR 未產生文字。",
+            )
+
+        payload = {
+            "text": text,
+            "segments": [{"start": None, "end": None, "text": text}],
+            "backend": "openvino",
+            "device": self.config.device,
+            "model_dir": str(model_dir),
+        }
+        transcript_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        return AsrTranscriptionResult(
+            segments=(AsrTranscriptSegment(text=text),),
+            transcript_path=transcript_path,
+            status_message=f"OpenVINO ASR 逐字稿可用。device={self.config.device}",
+        )
+
+
 def build_local_audio_research_source(
     audio_path: Path | str,
     *,
@@ -170,6 +262,50 @@ def normalize_whisper_json_encoding(transcript_path: Path) -> None:
         json.dumps(payload, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+
+
+class _OpenVINOAsrRunner:
+    def __init__(self, config: OpenVINOAsrConfig) -> None:
+        self.config = config
+
+    def transcribe(self, audio_path: Path) -> str:
+        from optimum.intel.openvino import OVModelForSpeechSeq2Seq
+        from transformers import AutoProcessor
+
+        samples, sample_rate = _read_pcm_wav(audio_path)
+        processor = AutoProcessor.from_pretrained(self.config.model_dir)
+        model = OVModelForSpeechSeq2Seq.from_pretrained(self.config.model_dir, device=self.config.device)
+        inputs = processor(samples, sampling_rate=sample_rate, return_tensors="pt")
+        generated_ids = model.generate(
+            **inputs,
+            language=self.config.language,
+            task=self.config.task,
+        )
+        return str(processor.batch_decode(generated_ids, skip_special_tokens=True)[0])
+
+
+def _read_pcm_wav(audio_path: Path):
+    import numpy as np
+
+    with wave.open(str(audio_path), "rb") as audio:
+        channels = audio.getnchannels()
+        sample_width = audio.getsampwidth()
+        sample_rate = audio.getframerate()
+        frames = audio.readframes(audio.getnframes())
+
+    if sample_width == 1:
+        samples = np.frombuffer(frames, dtype=np.uint8).astype("float32")
+        samples = (samples - 128.0) / 128.0
+    elif sample_width == 2:
+        samples = np.frombuffer(frames, dtype="<i2").astype("float32") / 32768.0
+    elif sample_width == 4:
+        samples = np.frombuffer(frames, dtype="<i4").astype("float32") / 2147483648.0
+    else:
+        raise wave.Error(f"unsupported PCM sample width: {sample_width}")
+
+    if channels > 1:
+        samples = samples.reshape(-1, channels).mean(axis=1)
+    return samples, sample_rate
 
 
 def _raw_text(segments: tuple[AsrTranscriptSegment, ...]) -> str:

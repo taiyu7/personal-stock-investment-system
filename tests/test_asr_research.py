@@ -4,6 +4,8 @@ from personal_stock_investment_system.research import (
     AsrTranscriptSegment,
     AsrTranscriptionResult,
     BreezeAsrCliTranscriber,
+    OpenVINOAsrConfig,
+    OpenVINOAsrTranscriber,
     build_local_audio_research_source,
 )
 from personal_stock_investment_system.research.asr import _segments_from_whisper_json
@@ -19,6 +21,16 @@ class FakeSpeechToTextClient:
             ),
             transcript_path=audio_path.parent / "transcripts" / f"{audio_path.stem}.json",
         )
+
+
+class FakeOpenVINORunner:
+    def __init__(self, text: str = "投信買超 AI 伺服器族群。") -> None:
+        self.text = text
+        self.audio_path: Path | None = None
+
+    def transcribe(self, audio_path: Path) -> str:
+        self.audio_path = audio_path
+        return self.text
 
 
 def test_build_local_audio_research_source_from_asr_segments(tmp_path):
@@ -49,6 +61,73 @@ def test_breeze_asr_cli_transcriber_reports_missing_audio(tmp_path):
     assert result.status == "media_unavailable"
     assert result.segments == ()
     assert "不存在" in result.status_message
+
+
+def test_openvino_asr_transcriber_writes_single_segment_transcript(tmp_path):
+    audio_path = tmp_path / "sample.wav"
+    audio_path.write_bytes(b"fake wav")
+    output_dir = tmp_path / "transcripts"
+    runner = FakeOpenVINORunner()
+    transcriber = OpenVINOAsrTranscriber(
+        OpenVINOAsrConfig(
+            model_dir=tmp_path / "missing-model-ok-with-fake-runner",
+            device="GPU",
+            output_dir=output_dir,
+        ),
+        runner=runner,
+    )
+
+    result = transcriber.transcribe(audio_path)
+
+    assert result.status == "available"
+    assert result.segments == (AsrTranscriptSegment("投信買超 AI 伺服器族群。"),)
+    assert result.transcript_path == output_dir / "sample.json"
+    assert result.transcript_path.read_text(encoding="utf-8")
+    assert runner.audio_path == audio_path.resolve()
+
+
+def test_openvino_asr_transcriber_reports_missing_audio(tmp_path):
+    transcriber = OpenVINOAsrTranscriber(
+        OpenVINOAsrConfig(model_dir=tmp_path / "model"),
+        runner=FakeOpenVINORunner(),
+    )
+
+    result = transcriber.transcribe(tmp_path / "missing.wav")
+
+    assert result.status == "media_unavailable"
+    assert result.segments == ()
+    assert "不存在" in result.status_message
+
+
+def test_openvino_asr_transcriber_reports_missing_model_without_runner(tmp_path):
+    audio_path = tmp_path / "sample.wav"
+    audio_path.write_bytes(b"fake wav")
+    transcriber = OpenVINOAsrTranscriber(OpenVINOAsrConfig(model_dir=tmp_path / "missing-model"))
+
+    result = transcriber.transcribe(audio_path)
+
+    assert result.status == "unsupported_source"
+    assert result.segments == ()
+    assert "模型目錄" in result.status_message
+
+
+def test_build_local_audio_research_source_from_openvino_segments(tmp_path):
+    audio_path = tmp_path / "sample.wav"
+    audio_path.write_bytes(b"fake wav")
+    transcriber = OpenVINOAsrTranscriber(
+        OpenVINOAsrConfig(
+            model_dir=tmp_path / "fake-model",
+            output_dir=tmp_path / "transcripts",
+        ),
+        runner=FakeOpenVINORunner("外資回補被動元件。"),
+    )
+
+    result = build_local_audio_research_source(audio_path, client=transcriber, title="投顧片段")
+
+    assert result.status == "available"
+    assert "[timestamp:unknown] 外資回補被動元件。" in result.source.raw_text
+    assert "OpenVINO ASR 逐字稿可用" in result.status_message
+    assert "asr_status=available" in result.source.notes
 
 
 def test_segments_from_whisper_json_reads_timestamped_segments(tmp_path):

@@ -382,6 +382,8 @@ preferred backend
 3. 保留 Breeze-ASR-25 CPU CLI adapter 作為 fallback。
 4. 用 `sample2` 或更長投顧音檔驗證 OpenVINO GPU FP32 的長音檔穩定性。
 
+實作追蹤：[#45 新增 OpenVINO ASR adapter：支援 Breeze-ASR-25 GPU FP32 轉錄](https://github.com/taiyu7/personal-stock-investment-system/issues/45)
+
 ## 參考資料
 
 - GitHub issue：[#43 ASR Phase A：Breeze-ASR-25 保準確度加速可行性評估](https://github.com/taiyu7/personal-stock-investment-system/issues/43)
