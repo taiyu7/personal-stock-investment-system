@@ -230,6 +230,33 @@ docker compose --profile asr-tools run --rm asr-tools whisper data/raw/asr-sampl
 
 Breeze-ASR-25 會下載大型模型快取；本專案將 ASR cache 掛載到 `data/local/asr-cache/`，不會提交 Git。若 Whisper 產出的 JSON 顯示為 `\uXXXX` escape，研究工具的 ASR adapter 會在讀取後重新寫成可讀 UTF-8 JSON。
 
+### ASR 硬體路線選擇
+
+Breeze-ASR-25 的加速路線和電腦硬體高度相關，不能假設每台機器都能使用同一條最快路線。#43 Phase A 實測後，本專案目前採用 **OpenVINO GPU FP32** 作為本機 ASR 加速方向，CPU 只保留為 fallback。
+
+目前測試結論：
+
+- **Windows + Intel Arc / Core Ultra Arc GPU**：優先使用 OpenVINO GPU FP32。60 秒投顧音檔實測約 `101.92 秒`，RTF 約 `1.70`，是目前最快且輸出正常的路線。
+- **Docker ASR profile**：適合一般 CPU fallback、工具鏈驗證與可重現環境，但目前不作為 Intel GPU 加速主線。實測 Docker 內 XPU 不可用，Windows + Intel GPU passthrough 到 Docker / WSL 的成本與穩定性不適合作為預設方案。
+- **PyTorch XPU**：Windows 本機可偵測 Arc，也能跑最小 tensor 測試，但 Breeze-ASR-25 whisper patch 實際 ASR 轉錄比 CPU 慢，因此不採用。
+- **OpenVINO FP16**：可跑，但 15 秒 clip 沒有比 FP32 快；為降低精度變動風險，先採用 FP32。
+- **沒有 Intel GPU 的電腦**：仍可使用 CPU fallback，但長音檔會很慢，不適合作為日常投顧節目轉錄主線。
+
+其他人使用本專案時，應先依設備選擇 ASR 路線：
+
+```text
+有 Intel Arc / Core Ultra Arc GPU 的 Windows 主機
+  -> OpenVINO GPU FP32
+
+沒有 Intel GPU，或 OpenVINO 偵測不到 GPU
+  -> CPU fallback
+
+Docker 環境
+  -> app/tests/CPU fallback，不期待 Intel GPU 加速
+```
+
+OpenVINO 本機環境、模型與 cache 都放在 `data/local/`，不提交 Git。實作 adapter 時應加入 backend 偵測：能看到 OpenVINO `GPU` 時使用 OpenVINO GPU FP32；否則退回 Breeze-ASR-25 CPU CLI adapter。詳細實測紀錄請見 `docs/research/asr-hardware-acceleration-phase-a.md`。
+
 ## 本機 Python fallback
 
 日常開發優先使用 Docker。只有在需要快速檢查或 Docker 不方便啟動時，才使用本機 Python。
