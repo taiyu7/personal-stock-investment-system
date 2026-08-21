@@ -10,6 +10,8 @@ services:
       TIMEZONE: Asia/Taipei
       DATABASE_URL: sqlite:///data/local/personal-stock-investment.db
       ENABLE_LIVE_TRADING: "false"
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_RESEARCH_ANALYSIS_MODEL: ${OPENAI_RESEARCH_ANALYSIS_MODEL:-gpt-4.1-mini}
     volumes:
       - ./src:/app/src
       - ./apps:/app/apps
@@ -28,6 +30,8 @@ services:
       TIMEZONE: Asia/Taipei
       DATABASE_URL: sqlite:///data/local/personal-stock-investment.db
       ENABLE_LIVE_TRADING: "false"
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_RESEARCH_ANALYSIS_MODEL: ${OPENAI_RESEARCH_ANALYSIS_MODEL:-gpt-4.1-mini}
     volumes:
       - ./src:/app/src
       - ./apps:/app/apps

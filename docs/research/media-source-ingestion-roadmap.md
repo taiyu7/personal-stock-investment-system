@@ -197,7 +197,7 @@ Docker 測試結果：`18 passed`。
 目前 provider 狀態：
 
 - `rule_based_fallback`：已可用，沿用既有本機規則分析。
-- `openai`：已在 provider 邊界與 Dashboard 選項中保留，但尚未接真實 API；目前會明確標示未支援並回退本機規則。
+- `openai`：#51 先在 provider 邊界與 Dashboard 選項中保留；#55 開始接真實 OpenAI API adapter。
 - `anthropic_claude`：已在 provider 邊界與 Dashboard 選項中保留，但尚未接真實 API；目前會明確標示未支援並回退本機規則。
 
 已新增能力：
@@ -210,4 +210,34 @@ Docker 測試結果：`18 passed`。
 - `build_transcript_json_research_source()`
 - Dashboard「研究來源分析」新增 `ASR 逐字稿 JSON` 來源類型與彙整 provider 選擇。
 
-下一步才接真實 OpenAI / Claude API adapter，並補 secrets、usage / cost metadata、schema validation 與重試策略。
+下一步分拆成 #55 OpenAI API adapter 與後續 Claude API adapter，並補 usage / cost metadata、schema validation 與重試策略。
+
+## #55 OpenAI 研究彙整 API
+
+2026-08-22 已開 #55：`https://github.com/taiyu7/personal-stock-investment-system/issues/55`
+
+#55 目標是把 #51 保留的 `openai` provider 接成可用 adapter，同時維持 MVP 的保守失敗邊界：
+
+```text
+#49 transcript JSON / manual text
+  -> ResearchSource
+  -> OpenAIResearchAnalysisClient
+  -> OpenAI Responses API structured JSON
+  -> ResearchReport / Markdown
+  -> Dashboard display / download / output destinations
+```
+
+已完成設計與實作方向：
+
+- `.env.example` 新增 `OPENAI_API_KEY` 使用說明與 `OPENAI_RESEARCH_ANALYSIS_MODEL`。
+- `docker-compose.yml` 會把 `.env` 中的 OpenAI 設定傳給 `app` 與 `dashboard`。
+- `pyproject.toml` 與 `requirements.lock` 新增 OpenAI Python SDK，讓 Docker image 可直接安裝。
+- `OpenAIResearchAnalysisClient` 使用 OpenAI Responses API structured JSON，將逐字稿整理成既有 `ResearchReport` schema。
+- 若缺少 `OPENAI_API_KEY`、OpenAI API 呼叫失敗或 JSON 解析失敗，會明確標示 `analysis_failed`，並回退本機規則 fallback。
+
+後續仍建議另開單處理：
+
+- usage / cost metadata 持久化與 Dashboard 顯示。
+- 重試、timeout 與長逐字稿切段彙整。
+- Claude provider 真實 API adapter。
+- #50 OpenAI 音訊轉錄 provider。

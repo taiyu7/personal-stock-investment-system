@@ -40,5 +40,5 @@ def test_research_source_analysis_is_available_from_sidebar_navigation():
 def test_research_source_analysis_supports_transcript_json_and_provider_choice():
     assert INPUT_KIND_OPTIONS["ASR 逐字稿 JSON"] == "asr_transcript_json"
     assert ANALYSIS_PROVIDER_OPTIONS["本機規則 fallback"] == "rule_based_fallback"
-    assert ANALYSIS_PROVIDER_OPTIONS["OpenAI（尚未接 API）"] == "openai"
+    assert ANALYSIS_PROVIDER_OPTIONS["OpenAI"] == "openai"
     assert ANALYSIS_PROVIDER_OPTIONS["Claude（尚未接 API）"] == "anthropic_claude"
