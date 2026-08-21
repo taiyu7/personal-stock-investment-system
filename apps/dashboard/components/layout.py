@@ -11,9 +11,16 @@ def render_global_styles() -> None:
         <style>
         .app-version { color: #64748b; font-size: 0.84rem; font-weight: 500; line-height: 1.6; padding-top: 0.7rem; text-align: right; }
         .app-version strong { color: #0f172a; font-size: 0.92rem; font-weight: 700; }
-        section[data-testid="stSidebar"] div.stButton > button { background: transparent; border: 0; border-radius: 6px; color: #334155; font-size: 1rem; font-weight: 600; justify-content: flex-start; padding: 0.65rem 0.8rem; text-align: left; }
-        section[data-testid="stSidebar"] div.stButton > button:hover { background: #e0f2fe; color: #0369a1; }
+        section[data-testid="stSidebar"] { background: #f8fafc; border-right: 1px solid #cbd5e1; }
+        section[data-testid="stSidebar"] [data-testid="stSidebarContent"] { background: #f8fafc; }
+        section[data-testid="stSidebar"] div.stButton > button { background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; color: #0f172a; font-size: 1rem; font-weight: 700; justify-content: flex-start; padding: 0.65rem 0.8rem; text-align: left; width: 100%; }
+        section[data-testid="stSidebar"] div.stButton > button:hover { background: #dbeafe; border-color: #38bdf8; color: #075985; }
         section[data-testid="stSidebar"] div.stButton > button:focus { box-shadow: none; }
+        section[data-testid="stSidebar"] div.stButton > button:focus-visible { box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.35); }
+        section[data-testid="stSidebar"] div.stButton > button[kind="primary"],
+        section[data-testid="stSidebar"] div.stButton > button[data-testid="stBaseButton-primary"] { background: #0f172a; border-color: #0f172a; color: #ffffff; }
+        section[data-testid="stSidebar"] div.stButton > button[kind="primary"]:hover,
+        section[data-testid="stSidebar"] div.stButton > button[data-testid="stBaseButton-primary"]:hover { background: #1e293b; border-color: #1e293b; color: #ffffff; }
         .feature-log { margin-top: 1.5rem; max-width: 920px; }
         .feature-entry { border-left: 2px solid #94a3b8; margin-left: 0.55rem; padding: 0 0 1.4rem 1.5rem; position: relative; }
         .feature-entry:last-child { padding-bottom: 0; }
@@ -66,7 +73,12 @@ def render_page_header(app_version: str, last_updated: str) -> None:
 def render_sidebar(current_page: str) -> str:
     selected_page = current_page
     with st.sidebar:
-        for page in SIDEBAR_PAGES:
-            if st.button(page, use_container_width=True):
+        for index, page in enumerate(SIDEBAR_PAGES):
+            if st.button(
+                page,
+                key=f"sidebar_page_{index}",
+                type="primary" if page == current_page else "secondary",
+                width="stretch",
+            ):
                 selected_page = page
     return selected_page

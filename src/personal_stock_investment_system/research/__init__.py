@@ -13,6 +13,11 @@ from personal_stock_investment_system.research.asr import (
     SpeechToTextClient,
     build_local_audio_research_source,
 )
+from personal_stock_investment_system.research.browser_asr import (
+    BrowserSessionAsrInput,
+    BrowserSessionAsrResult,
+    run_browser_session_asr_pipeline,
+)
 from personal_stock_investment_system.research.entrypoint import (
     PhaseOneResearchInput,
     PhaseOneResearchResult,
@@ -40,6 +45,7 @@ from personal_stock_investment_system.research.media import (
     AudioPreprocessor,
     create_selenium_chrome_driver,
     extract_media_requests_from_chrome_performance_logs,
+    select_downloadable_media_request,
     select_stream_manifest,
     try_start_browser_media_playback,
 )
@@ -95,6 +101,8 @@ __all__ = [
     "AsrTranscriptionResult",
     "BreezeAsrCliConfig",
     "BreezeAsrCliTranscriber",
+    "BrowserSessionAsrInput",
+    "BrowserSessionAsrResult",
     "OpenVINOAsrConfig",
     "OpenVINOAsrTranscriber",
     "OpenVINOTranscriptionRunner",
@@ -136,7 +144,9 @@ __all__ = [
     "pdf_to_markdown",
     "render_research_report",
     "resolve_research_report_output_destinations",
+    "run_browser_session_asr_pipeline",
     "run_phase_one_research_source_analysis",
+    "select_downloadable_media_request",
     "select_stream_manifest",
     "try_start_browser_media_playback",
     "write_research_report_outputs",

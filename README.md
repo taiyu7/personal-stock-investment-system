@@ -282,7 +282,7 @@ result = build_local_audio_research_source(
 )
 ```
 
-目前 OpenVINO adapter 預期輸入為 PCM WAV；若來源是 MP3 或影片，請先用 FFmpeg 轉成 16kHz mono WAV。後續影片 / 連結流程會在素材合法取得後，先下載或抽取音訊，再交給 OpenVINO ASR adapter。
+目前 OpenVINO adapter 預期輸入為 PCM WAV；若來源是 MP3 或影片，請先用 FFmpeg 轉成 16kHz mono WAV。OpenVINO runner 會以 `chunk_length_seconds=25.0` 將長音檔分段轉錄，再合併成 timestamped `AsrTranscriptSegment`，避免 Whisper 類模型直接 `generate()` 長音檔時只輸出前段內容。後續影片 / 連結流程會在素材取得後，先下載或抽取音訊，再交給 OpenVINO ASR adapter。
 
 ## 本機 Python fallback
 
@@ -418,3 +418,46 @@ Chrome performance log / browser session
 - `BrowserSessionMediaAcquirer`
 
 實際使用時，建議依設備與來源選擇路線：有 Intel Arc / Core Ultra Arc GPU 的 Windows 本機可接 #45 OpenVINO GPU FP32；沒有 Intel GPU 或在 Docker 內執行時，應視為 CPU fallback 或只跑下載/前處理測試。瀏覽器 session 部分可使用既有 Chrome profile 取得當下有效的 media request，不保存短效 m3u8 當作長期資料。
+
+#49 新增 `psis-browser-asr` 入口，把 browser session media acquisition 串成可以操作的命令。只想先產生 ASR-ready WAV 時，可以不傳 OpenVINO model：
+
+```powershell
+psis-browser-asr "https://example.com/member-video" `
+  --chrome-user-data-dir "C:\Users\taiyu\AppData\Local\Google\Chrome\User Data" `
+  --chrome-profile-directory "Default" `
+  --output-stem sample-video
+```
+
+若要接 OpenVINO ASR，補上模型目錄：
+
+```powershell
+psis-browser-asr "https://example.com/member-video" `
+  --chrome-user-data-dir "C:\Users\taiyu\AppData\Local\Google\Chrome\User Data" `
+  --chrome-profile-directory "Default" `
+  --output-stem sample-video `
+  --openvino-model-dir data\local\openvino\breeze-asr-25-fp32 `
+  --openvino-device GPU
+```
+
+輸出重點：
+
+- `wav_path`：FFmpeg 轉好的 16kHz mono WAV。
+- `selected_media_url`：當次 browser session 嗅探到並用於下載的 media URL。
+- `transcript_path`：有接 OpenVINO ASR 時產生的 transcript JSON。
+
+YouTube 會員影片若 yt-dlp 需要讀取登入狀態與解析 YouTube player challenge，可使用：
+
+```powershell
+psis-browser-asr "https://www.youtube.com/watch?v=..." `
+  --chrome-user-data-dir "data\local\psis-browser-asr-debug-profile" `
+  --chrome-binary-path "C:\Program Files\Google\Chrome\Application\chrome.exe" `
+  --chromedriver-path "data\local\chromedriver\chromedriver-win64\chromedriver.exe" `
+  --output-stem youtube-member-test `
+  --settle-seconds 3 `
+  --playback-wait-seconds 20 `
+  --yt-dlp-download-page-url `
+  --yt-dlp-cookies-from-browser "chrome:C:\Users\taiyu\AppData\Local\psis-browser-asr-profile\Default" `
+  --yt-dlp-remote-components ejs:github
+```
+
+這條路線會先用瀏覽器確認頁面與媒體請求，再讓 yt-dlp 用原始 page URL、Chrome profile cookie 與 remote component 解析 YouTube 下載格式，最後交給 FFmpeg 轉 WAV。

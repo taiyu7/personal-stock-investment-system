@@ -33,6 +33,14 @@ class FakeOpenVINORunner:
         return self.text
 
 
+class FakeSegmentOpenVINORunner:
+    def transcribe(self, audio_path: Path) -> tuple[AsrTranscriptSegment, ...]:
+        return (
+            AsrTranscriptSegment("第一段內容。", 0.0, 25.0),
+            AsrTranscriptSegment("第二段內容。", 25.0, 50.0),
+        )
+
+
 def test_build_local_audio_research_source_from_asr_segments(tmp_path):
     audio_path = tmp_path / "sample.wav"
     audio_path.write_bytes(b"fake wav")
@@ -84,6 +92,31 @@ def test_openvino_asr_transcriber_writes_single_segment_transcript(tmp_path):
     assert result.transcript_path == output_dir / "sample.json"
     assert result.transcript_path.read_text(encoding="utf-8")
     assert runner.audio_path == audio_path.resolve()
+
+
+def test_openvino_asr_transcriber_writes_timestamped_segments(tmp_path):
+    audio_path = tmp_path / "sample.wav"
+    audio_path.write_bytes(b"fake wav")
+    output_dir = tmp_path / "transcripts"
+    transcriber = OpenVINOAsrTranscriber(
+        OpenVINOAsrConfig(
+            model_dir=tmp_path / "missing-model-ok-with-fake-runner",
+            device="GPU",
+            output_dir=output_dir,
+        ),
+        runner=FakeSegmentOpenVINORunner(),
+    )
+
+    result = transcriber.transcribe(audio_path)
+
+    assert result.status == "available"
+    assert result.segments == (
+        AsrTranscriptSegment("第一段內容。", 0.0, 25.0),
+        AsrTranscriptSegment("第二段內容。", 25.0, 50.0),
+    )
+    transcript_text = result.transcript_path.read_text(encoding="utf-8")
+    assert '"start": 25.0' in transcript_text
+    assert '"text": "第一段內容。\\n第二段內容。"' in transcript_text
 
 
 def test_openvino_asr_transcriber_reports_missing_audio(tmp_path):

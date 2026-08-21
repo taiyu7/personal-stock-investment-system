@@ -21,6 +21,8 @@ class DiscoveredMediaRequest:
     source: str = "browser_performance_log"
     content_type: str = ""
     method: str = ""
+    headers: tuple[tuple[str, str], ...] = ()
+    download_url: str = ""
 
     def is_stream_manifest(self) -> bool:
         return is_stream_manifest_url(self.url) or "mpegurl" in self.content_type.lower()
@@ -103,11 +105,13 @@ class BrowserSessionMediaAcquirer:
         discovered_requests = self.discovery.discover(page_url)
         selected_request = select_stream_manifest(discovered_requests)
         if selected_request is None:
+            selected_request = select_downloadable_media_request(discovered_requests)
+        if selected_request is None:
             return MediaAcquisitionResult(
                 status="media_unavailable",
                 source_identifier=page_url,
                 discovered_requests=discovered_requests,
-                status_message="No m3u8 or stream manifest was observed from the browser session.",
+                status_message="No m3u8, stream manifest, or downloadable media request was observed from the browser session.",
             )
 
         try:
@@ -149,6 +153,7 @@ class SeleniumBrowserSessionConfig:
     chrome_user_data_dir: Path | None = None
     chrome_profile_directory: str = ""
     chrome_binary_path: Path | None = None
+    chromedriver_path: Path | None = None
     headless: bool = False
     page_load_timeout_seconds: int = 60
     settle_seconds: float = 3.0
@@ -196,8 +201,10 @@ class YtDlpMediaDownloader:
             "-o",
             str(resolved_output_dir / self.output_template),
             *self.extra_args,
-            media_request.url,
+            media_request.download_url or media_request.url,
         ]
+        for key, value in media_request.headers:
+            command[1:1] = ["--add-header", f"{key}: {value}"]
         completed = run_checked_command(command, self.runner, "yt-dlp", "media_unavailable")
         output_path = last_stdout_path(completed.stdout, resolved_output_dir)
         return MediaArtifact(
@@ -262,7 +269,7 @@ def extract_media_requests_from_chrome_performance_logs(entries: Iterable[object
         if not isinstance(params, dict):
             continue
 
-        url, content_type = _extract_url_and_content_type(params)
+        url, content_type, headers = _extract_url_content_type_and_headers(params)
         if not url or not _looks_like_media_request(url, content_type):
             continue
         if url in seen:
@@ -273,6 +280,7 @@ def extract_media_requests_from_chrome_performance_logs(entries: Iterable[object
                 url=url,
                 content_type=content_type,
                 method=method,
+                headers=headers,
             )
         )
     return tuple(requests)
@@ -304,9 +312,23 @@ def select_stream_manifest(requests: Iterable[DiscoveredMediaRequest]) -> Discov
     return None
 
 
+def select_downloadable_media_request(requests: Iterable[DiscoveredMediaRequest]) -> DiscoveredMediaRequest | None:
+    for media_request in requests:
+        if media_request.is_stream_manifest():
+            return media_request
+    for media_request in requests:
+        if "videoplayback" in media_request.url.lower():
+            return media_request
+    for media_request in requests:
+        if _looks_like_media_request(media_request.url, media_request.content_type):
+            return media_request
+    return None
+
+
 def create_selenium_chrome_driver(config: SeleniumBrowserSessionConfig) -> BrowserPerformanceLogDriver:
     try:
         from selenium import webdriver
+        from selenium.webdriver.chrome.service import Service
         from selenium.webdriver.chrome.options import Options
     except ImportError as error:
         raise MediaAcquisitionError(
@@ -317,6 +339,15 @@ def create_selenium_chrome_driver(config: SeleniumBrowserSessionConfig) -> Brows
 
     options = Options()
     options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
+    options.add_argument("--no-sandbox")
+    options.add_argument("--no-first-run")
+    options.add_argument("--no-default-browser-check")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--disable-gpu-sandbox")
+    options.add_argument("--disable-vulkan")
+    options.add_argument("--use-angle=swiftshader")
+    options.add_argument("--remote-debugging-pipe")
     if config.headless:
         options.add_argument("--headless=new")
     if config.chrome_user_data_dir is not None:
@@ -325,6 +356,9 @@ def create_selenium_chrome_driver(config: SeleniumBrowserSessionConfig) -> Brows
         options.add_argument(f"--profile-directory={config.chrome_profile_directory}")
     if config.chrome_binary_path is not None:
         options.binary_location = str(config.chrome_binary_path.expanduser().resolve())
+    if config.chromedriver_path is not None:
+        service = Service(str(config.chromedriver_path.expanduser().resolve()))
+        return webdriver.Chrome(service=service, options=options)
     return webdriver.Chrome(options=options)
 
 
@@ -363,7 +397,14 @@ def run_checked_command(
 ) -> subprocess.CompletedProcess[str]:
     try:
         if runner is None:
-            return subprocess.run(list(command), check=True, capture_output=True, text=True)
+            return subprocess.run(
+                list(command),
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
         return runner(command)
     except FileNotFoundError as error:
         raise MediaAcquisitionError(
@@ -385,7 +426,11 @@ def last_stdout_path(stdout: str, output_dir: Path) -> Path:
         if not candidate.is_absolute():
             candidate = output_dir / candidate
         return candidate.resolve()
-    return output_dir.resolve()
+    raise MediaAcquisitionError(
+        "media_unavailable",
+        "yt-dlp did not report a downloaded media file path.",
+        "empty stdout from yt-dlp",
+    )
 
 
 def _loads_json(value: str) -> object:
@@ -395,29 +440,39 @@ def _loads_json(value: str) -> object:
         return {}
 
 
-def _extract_url_and_content_type(params: dict[str, object]) -> tuple[str, str]:
+def _extract_url_content_type_and_headers(params: dict[str, object]) -> tuple[str, str, tuple[tuple[str, str], ...]]:
     request = params.get("request")
     if isinstance(request, dict):
         url = str(request.get("url", ""))
-        content_type = _headers_content_type(request.get("headers"))
+        headers = _headers_tuple(request.get("headers"))
+        content_type = _headers_content_type(headers)
         if url:
-            return url, content_type
+            return url, content_type, headers
 
     response = params.get("response")
     if isinstance(response, dict):
         url = str(response.get("url", ""))
-        content_type = _headers_content_type(response.get("headers")) or str(response.get("mimeType", ""))
+        headers = _headers_tuple(response.get("headers"))
+        content_type = _headers_content_type(headers) or str(response.get("mimeType", ""))
         if url:
-            return url, content_type
+            return url, content_type, headers
 
-    return "", ""
+    return "", "", ()
 
 
-def _headers_content_type(headers: object) -> str:
+def _headers_tuple(headers: object) -> tuple[tuple[str, str], ...]:
     if not isinstance(headers, dict):
-        return ""
-    for key, value in headers.items():
-        if str(key).lower() == "content-type":
+        return ()
+    return tuple(
+        (str(key), str(value))
+        for key, value in headers.items()
+        if str(key).strip() and str(value).strip() and not str(key).startswith(":")
+    )
+
+
+def _headers_content_type(headers: tuple[tuple[str, str], ...]) -> str:
+    for key, value in headers:
+        if key.lower() == "content-type":
             return str(value)
     return ""
 
@@ -425,10 +480,12 @@ def _headers_content_type(headers: object) -> str:
 def _looks_like_media_request(url: str, content_type: str) -> bool:
     lowered_type = content_type.lower()
     lowered_url = url.lower()
+    if "youtube.com/s/search/audio/" in lowered_url:
+        return False
     return (
         is_stream_manifest_url(url)
         or "mpegurl" in lowered_type
         or "audio/" in lowered_type
         or "video/" in lowered_type
-        or any(token in lowered_url for token in (".mp4", ".m4a", ".mp3", ".wav", ".aac"))
+        or any(token in lowered_url for token in (".mp4", ".m4a", ".mp3", ".wav", ".aac", "videoplayback"))
     )
