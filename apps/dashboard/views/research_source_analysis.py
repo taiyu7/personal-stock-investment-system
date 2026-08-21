@@ -7,6 +7,7 @@ import streamlit as st
 from personal_stock_investment_system.research import (
     DEFAULT_OBSIDIAN_INBOX_PATH,
     PhaseOneResearchInput,
+    ResearchAnalysisSettings,
     ResearchReportOutputSettings,
     build_research_report_filename,
     run_phase_one_research_source_analysis,
@@ -15,16 +16,23 @@ from personal_stock_investment_system.research import (
 
 INPUT_KIND_OPTIONS = {
     "手動文字／逐字稿": "manual_text",
+    "ASR 逐字稿 JSON": "asr_transcript_json",
     "PDF 路徑": "pdf",
     "公開 YouTube URL": "youtube_public",
+}
+
+ANALYSIS_PROVIDER_OPTIONS = {
+    "本機規則 fallback": "rule_based_fallback",
+    "OpenAI（尚未接 API）": "openai",
+    "Claude（尚未接 API）": "anthropic_claude",
 }
 
 
 def render_research_source_analysis_page() -> None:
     st.subheader("研究來源分析")
-    st.caption("輸入公開影片、PDF 或手動文字，產生第一階段固定格式研究報告。")
+    st.caption("輸入逐字稿、PDF 或公開影片來源，產生固定格式研究報告。")
 
-    input_label = st.radio("來源類型", tuple(INPUT_KIND_OPTIONS), horizontal=True)
+    input_label = st.segmented_control("來源類型", tuple(INPUT_KIND_OPTIONS), default="手動文字／逐字稿")
     input_kind = INPUT_KIND_OPTIONS[input_label]
 
     title = st.text_input("標題", value="")
@@ -34,15 +42,37 @@ def render_research_source_analysis_page() -> None:
 
     youtube_url = ""
     pdf_path = None
+    transcript_json_path = None
     manual_text = ""
+    source_url = ""
     if input_kind == "youtube_public":
         youtube_url = st.text_input("公開 YouTube URL", value="")
         manual_text = st.text_area("手動逐字稿或摘要 fallback", value="", height=220)
+    elif input_kind == "asr_transcript_json":
+        transcript_json_value = st.text_input(
+            "ASR 逐字稿 JSON 路徑",
+            value="",
+            placeholder=r"data\processed\asr-transcripts\openvino\manual-verify-001-asr.json",
+        )
+        transcript_json_path = Path(transcript_json_value) if transcript_json_value.strip() else None
+        source_url = st.text_input("原始影片 URL", value="")
     elif input_kind == "pdf":
         pdf_value = st.text_input("PDF 路徑", value="")
         pdf_path = Path(pdf_value) if pdf_value.strip() else None
     else:
         manual_text = st.text_area("手動文字／逐字稿", value="", height=260)
+        source_url = st.text_input("來源 URL", value="")
+
+    st.markdown("### 彙整方式")
+    analysis_label = st.segmented_control(
+        "研究彙整 provider",
+        tuple(ANALYSIS_PROVIDER_OPTIONS),
+        default="本機規則 fallback",
+    )
+    analysis_provider = ANALYSIS_PROVIDER_OPTIONS[analysis_label]
+    analysis_model = st.text_input("模型／版本", value="rule_based_v1" if analysis_provider == "rule_based_fallback" else "")
+    if analysis_provider != "rule_based_fallback":
+        st.warning("這個 provider 還沒有接上真實 API；本次會明確標示未支援並改用本機規則 fallback。")
 
     st.markdown("### 輸出目的地")
     write_to_obsidian = st.checkbox("輸出到 Obsidian inbox", value=True)
@@ -66,21 +96,32 @@ def render_research_source_analysis_page() -> None:
                     manual_text=manual_text,
                     youtube_url=youtube_url,
                     pdf_path=pdf_path,
+                    transcript_json_path=transcript_json_path,
+                    source_url=source_url,
                     publisher=publisher,
                     speaker=speaker,
                     notes=notes,
                 ),
                 output_settings=output_settings,
+                analysis_settings=ResearchAnalysisSettings(
+                    provider=analysis_provider,  # type: ignore[arg-type]
+                    model=analysis_model,
+                ),
             )
         except Exception as error:  # noqa: BLE001 - Streamlit page should show recoverable user input errors.
             st.error(str(error))
             return
 
         for status in result.statuses:
-            if "transcript_unavailable" in status or "未取得" in status or "未抽取" in status:
+            if "transcript_unavailable" in status or "未取得" in status or "未抽取" in status or "尚未接上" in status:
                 st.warning(status)
             else:
                 st.info(status)
+        with st.container(border=True):
+            st.write(f"彙整 provider：{result.analysis_result.provider}")
+            st.write(f"彙整狀態：{result.analysis_result.status}")
+            if result.analysis_result.model:
+                st.write(f"模型／版本：{result.analysis_result.model}")
         if result.written_outputs:
             for item in result.written_outputs:
                 st.success(f"{item.kind}：{item.path}")

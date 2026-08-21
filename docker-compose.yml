@@ -32,6 +32,8 @@ services:
       - ./src:/app/src
       - ./apps:/app/apps
       - ./data/local:/app/data/local
+      - ./data/raw:/app/data/raw
+      - ./data/processed:/app/data/processed
     ports:
       - "8501:8501"
     command:

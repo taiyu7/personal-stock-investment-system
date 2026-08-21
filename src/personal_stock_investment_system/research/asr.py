@@ -249,6 +249,76 @@ def build_local_audio_research_source(
     )
 
 
+def load_asr_transcription_result(transcript_path: Path | str) -> AsrTranscriptionResult:
+    resolved_transcript_path = _resolve_local_transcript_path(transcript_path)
+    if not resolved_transcript_path.exists():
+        return AsrTranscriptionResult(
+            segments=(),
+            transcript_path=resolved_transcript_path,
+            status="transcript_unavailable",
+            status_message="逐字稿 JSON 檔不存在。",
+            error=str(resolved_transcript_path),
+        )
+    try:
+        segments = _segments_from_whisper_json(resolved_transcript_path)
+    except Exception as error:
+        return AsrTranscriptionResult(
+            segments=(),
+            transcript_path=resolved_transcript_path,
+            status="transcript_unavailable",
+            status_message="逐字稿 JSON 無法解析。",
+            error=str(error),
+        )
+    if not segments:
+        return AsrTranscriptionResult(
+            segments=(),
+            transcript_path=resolved_transcript_path,
+            status="transcript_unavailable",
+            status_message="逐字稿 JSON 未包含可用文字段落。",
+        )
+    return AsrTranscriptionResult(
+        segments=segments,
+        transcript_path=resolved_transcript_path,
+        status_message="已讀取 ASR 逐字稿 JSON。",
+    )
+
+
+def build_transcript_json_research_source(
+    transcript_path: Path | str,
+    *,
+    title: str = "",
+    source_url: str = "",
+    publisher: str = "",
+    speaker: str = "",
+    speakers: tuple[str, ...] = (),
+    published_date: str = "",
+    notes: str = "",
+) -> ResearchSourceImportResult:
+    resolved_transcript_path = _resolve_local_transcript_path(transcript_path)
+    transcription = load_asr_transcription_result(resolved_transcript_path)
+    raw_text = _raw_text(transcription.segments)
+    source = ResearchSource(
+        source_type="local_audio",
+        title=title or resolved_transcript_path.stem,
+        source_url=source_url,
+        publisher=publisher,
+        speaker=speaker,
+        speakers=speakers,
+        published_date=published_date,
+        raw_text=raw_text,
+        markdown_text=_transcript_json_markdown_text(resolved_transcript_path, transcription),
+        source_locator=f"transcript:{resolved_transcript_path}",
+        notes=_notes(notes, transcription),
+    )
+    return ResearchSourceImportResult(
+        source=source,
+        status=transcription.status,
+        source_identifier=str(resolved_transcript_path),
+        status_message=transcription.status_message,
+        error=transcription.error,
+    )
+
+
 def _segments_from_whisper_json(transcript_path: Path) -> tuple[AsrTranscriptSegment, ...]:
     payload = json.loads(transcript_path.read_text(encoding="utf-8"))
     segments = payload.get("segments", [])
@@ -261,6 +331,23 @@ def _segments_from_whisper_json(transcript_path: Path) -> tuple[AsrTranscriptSeg
         for segment in segments
         if str(segment.get("text", "")).strip()
     )
+
+
+def _resolve_local_transcript_path(path: Path | str) -> Path:
+    raw_path = str(path).strip()
+    resolved_path = Path(raw_path).expanduser()
+    if resolved_path.exists():
+        return resolved_path.resolve()
+
+    normalized = raw_path.replace("\\", "/")
+    marker = "personal-stock-investment-system/"
+    if marker in normalized:
+        relative_tail = normalized.split(marker, 1)[1]
+        candidate = Path(relative_tail).expanduser()
+        if candidate.exists():
+            return candidate.resolve()
+
+    return resolved_path.resolve()
 
 
 def normalize_whisper_json_encoding(transcript_path: Path) -> None:
@@ -357,6 +444,23 @@ def _markdown_text(audio_path: Path, transcription: AsrTranscriptionResult) -> s
         f"- 音訊路徑：{audio_path}",
         f"- ASR 狀態：{transcription.status}",
         f"- 逐字稿檔案：{transcription.transcript_path or '未產生'}",
+        "",
+        "## 文字內容",
+        "",
+    ]
+    if transcription.segments:
+        lines.extend(f"- [{segment.display_timestamp()}] {segment.text}" for segment in transcription.segments)
+    else:
+        lines.append(transcription.status_message)
+    return "\n".join(lines).strip() + "\n"
+
+
+def _transcript_json_markdown_text(transcript_path: Path, transcription: AsrTranscriptionResult) -> str:
+    lines = [
+        f"# {transcript_path.stem}",
+        "",
+        f"- 逐字稿檔案：{transcript_path}",
+        f"- ASR 狀態：{transcription.status}",
         "",
         "## 文字內容",
         "",

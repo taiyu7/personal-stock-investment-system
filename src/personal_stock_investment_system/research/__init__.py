@@ -1,6 +1,14 @@
 """Research source models and Markdown report rendering."""
 
 from personal_stock_investment_system.research.analysis import analyze_research_source
+from personal_stock_investment_system.research.analysis_provider import (
+    ResearchAnalysisClient,
+    ResearchAnalysisProviderName,
+    ResearchAnalysisResult,
+    ResearchAnalysisSettings,
+    analyze_research_source_with_provider,
+    build_research_analysis_client,
+)
 from personal_stock_investment_system.research.asr import (
     DEFAULT_BREEZE_ASR_MODEL,
     AsrTranscriptSegment,
@@ -12,6 +20,8 @@ from personal_stock_investment_system.research.asr import (
     OpenVINOTranscriptionRunner,
     SpeechToTextClient,
     build_local_audio_research_source,
+    build_transcript_json_research_source,
+    load_asr_transcription_result,
 )
 from personal_stock_investment_system.research.browser_asr import (
     BrowserSessionAsrInput,
@@ -87,6 +97,10 @@ from personal_stock_investment_system.research.youtube import (
 __all__ = [
     "CompanyProfileNote",
     "ResearchReport",
+    "ResearchAnalysisClient",
+    "ResearchAnalysisProviderName",
+    "ResearchAnalysisResult",
+    "ResearchAnalysisSettings",
     "ResearchSource",
     "ResearchSourceImportResult",
     "SourceReference",
@@ -132,8 +146,11 @@ __all__ = [
     "TranscriptUnavailableYouTubeClient",
     "WrittenResearchReport",
     "analyze_research_source",
+    "analyze_research_source_with_provider",
+    "build_research_analysis_client",
     "build_research_report_filename",
     "build_local_audio_research_source",
+    "build_transcript_json_research_source",
     "build_pdf_research_source",
     "build_youtube_research_source",
     "create_selenium_chrome_driver",
@@ -141,6 +158,7 @@ __all__ = [
     "extract_media_requests_from_chrome_performance_logs",
     "extract_text_pages",
     "parse_youtube_video_id",
+    "load_asr_transcription_result",
     "pdf_to_markdown",
     "render_research_report",
     "resolve_research_report_output_destinations",

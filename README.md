@@ -68,12 +68,19 @@ AI Orchestrator 負責任務分派、流程編排與結果整合，不直接保�
 ## Dashboard 功能
 
 - **市場儀表板**：四個觀察區塊、市場摘要、五日行情、漲跌幅與月線 K 線圖。
-- **研究來源分析**：從左側 sidebar 進入，支援手動文字／逐字稿、PDF 路徑與公開 YouTube URL，產生固定格式研究報告 Markdown，並可依設定輸出到 Obsidian inbox、自選路徑或只在介面顯示。
+- **研究來源分析**：從左側 sidebar 進入，支援手動文字／逐字稿、#49 產出的 ASR 逐字稿 JSON、PDF 路徑與公開 YouTube URL，產生固定格式研究報告 Markdown，並可依設定輸出到 Obsidian inbox、自選路徑或只在介面顯示。
 - **每日復盤**：填寫盤前／盤後持股水位、交易紀錄、計畫符合度與檢討內容；可依日期儲存、覆寫、載入及下載 Markdown。
 - **進銘的股價概念**：保存既有的價格、成交量與判讀框架。
 - **開發歷程**：保留 AutoDashboard v0.1 至 v0.6 的歷史，並記錄整合後的功能演進。
 
-研究來源分析目前是第一階段 MVP：YouTube URL 會解析 video id 並顯示逐字稿 fallback 狀態，但尚未實際抓取 YouTube CC 或 automatic captions。若要分析影片內容，目前需要手動貼上逐字稿或摘要；後續會補真實字幕 adapter。
+研究來源分析目前是第一階段 MVP：YouTube URL 會解析 video id 並顯示逐字稿 fallback 狀態，但尚未實際抓取 YouTube CC 或 automatic captions。若要分析影片內容，目前可手動貼上逐字稿、貼上 #49 產出的 ASR 逐字稿 JSON 路徑，或先提供摘要；後續會補真實字幕 adapter。
+
+### #51 研究彙整 provider
+
+已新增研究彙整 provider 邊界。Dashboard 目前可選：
+
+- `本機規則 fallback`：目前可用，沿用保守 rule-based 分析器。
+- `OpenAI` / `Claude`：目前會明確標示尚未接上 API，並回退本機規則 fallback；後續再接真實 API adapter、secrets、usage / cost 記錄與 schema validation。
 
 預設觀察清單分為：
 

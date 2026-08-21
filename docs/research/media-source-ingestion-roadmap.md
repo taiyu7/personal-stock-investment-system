@@ -179,3 +179,35 @@ Docker 測試結果：`18 passed`。
 - Docker 相關單元測試：`19 passed`。
 - OpenVINO adapter 長音檔補充：直接把 3 分 20 秒 WAV 丟進 OpenVINO `generate()` 只會得到前段短稿；已改為預設 25 秒分段轉錄，`sample-video-16k-mono.wav` 實測產生 8 個 timestamped segments，文字覆蓋 0.0 到 199.808 秒。
 - Docker 相關單元測試更新：`20 passed`。
+
+## #51 研究彙整 Provider 與 Dashboard MVP
+
+2026-08-22 已開始 #51：`https://github.com/taiyu7/personal-stock-investment-system/issues/51`
+
+第一版 MVP 先把 #49 的輸出接進 Dashboard，而不是直接接付費 API：
+
+```text
+#49 transcript JSON
+  -> ResearchSource(local_audio)
+  -> analysis provider boundary
+  -> Markdown research report
+  -> Dashboard display / download / output destinations
+```
+
+目前 provider 狀態：
+
+- `rule_based_fallback`：已可用，沿用既有本機規則分析。
+- `openai`：已在 provider 邊界與 Dashboard 選項中保留，但尚未接真實 API；目前會明確標示未支援並回退本機規則。
+- `anthropic_claude`：已在 provider 邊界與 Dashboard 選項中保留，但尚未接真實 API；目前會明確標示未支援並回退本機規則。
+
+已新增能力：
+
+- `ResearchAnalysisSettings`
+- `ResearchAnalysisResult`
+- `ResearchAnalysisClient`
+- `analyze_research_source_with_provider()`
+- `load_asr_transcription_result()`
+- `build_transcript_json_research_source()`
+- Dashboard「研究來源分析」新增 `ASR 逐字稿 JSON` 來源類型與彙整 provider 選擇。
+
+下一步才接真實 OpenAI / Claude API adapter，並補 secrets、usage / cost metadata、schema validation 與重試策略。

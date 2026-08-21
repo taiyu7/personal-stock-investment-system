@@ -7,11 +7,17 @@ from datetime import date
 from pathlib import Path
 from typing import Literal
 
-from personal_stock_investment_system.research.analysis import analyze_research_source
+from personal_stock_investment_system.research.analysis_provider import (
+    ResearchAnalysisClient,
+    ResearchAnalysisResult,
+    ResearchAnalysisSettings,
+    analyze_research_source_with_provider,
+)
 from personal_stock_investment_system.research.markdown import render_research_report
 from personal_stock_investment_system.research.output import ResearchReportOutputSettings, WrittenResearchReport, write_research_report_outputs
 from personal_stock_investment_system.research.pdf import build_pdf_research_source
 from personal_stock_investment_system.research.sources import ResearchReport, ResearchSource, ResearchSourceImportResult
+from personal_stock_investment_system.research.asr import build_transcript_json_research_source
 from personal_stock_investment_system.research.youtube import (
     YouTubePublicClient,
     YouTubeTranscriptSegment,
@@ -19,7 +25,7 @@ from personal_stock_investment_system.research.youtube import (
     build_youtube_research_source,
 )
 
-ResearchInputKind = Literal["manual_text", "pdf", "youtube_public"]
+ResearchInputKind = Literal["manual_text", "pdf", "youtube_public", "asr_transcript_json"]
 
 
 @dataclass(frozen=True)
@@ -29,6 +35,7 @@ class PhaseOneResearchInput:
     manual_text: str = ""
     youtube_url: str = ""
     pdf_path: Path | str | None = None
+    transcript_json_path: Path | str | None = None
     source_url: str = ""
     publisher: str = ""
     speaker: str = ""
@@ -43,6 +50,7 @@ class PhaseOneResearchResult:
     report: ResearchReport
     markdown: str
     import_result: ResearchSourceImportResult
+    analysis_result: ResearchAnalysisResult
     written_outputs: tuple[WrittenResearchReport, ...] = ()
     statuses: tuple[str, ...] = ()
 
@@ -65,6 +73,8 @@ def run_phase_one_research_source_analysis(
     *,
     output_settings: ResearchReportOutputSettings | None = None,
     youtube_client: YouTubePublicClient | None = None,
+    analysis_settings: ResearchAnalysisSettings | None = None,
+    analysis_client: ResearchAnalysisClient | None = None,
     report_date: date | None = None,
 ) -> PhaseOneResearchResult:
     statuses: list[str] = []
@@ -73,7 +83,13 @@ def run_phase_one_research_source_analysis(
     statuses.append(import_result.status_message)
     if source_input.input_kind == "youtube_public" and import_result.status == "transcript_unavailable":
         statuses.append("未取得公開逐字稿，請手動貼上逐字稿或摘要後再分析。")
-    report = analyze_research_source(source)
+    analysis_result = analyze_research_source_with_provider(
+        source,
+        settings=analysis_settings,
+        client=analysis_client,
+    )
+    report = analysis_result.report
+    statuses.append(analysis_result.status_message)
     markdown = render_research_report(report)
     written_outputs = write_research_report_outputs(
         report,
@@ -90,6 +106,7 @@ def run_phase_one_research_source_analysis(
         report=report,
         markdown=markdown,
         import_result=import_result,
+        analysis_result=analysis_result,
         written_outputs=written_outputs,
         statuses=tuple(statuses),
     )
@@ -169,5 +186,18 @@ def _build_source_import_result(
             source_identifier=result.import_result.source_identifier,
             status_message=status_message,
             error=result.import_result.error,
+        )
+    if source_input.input_kind == "asr_transcript_json":
+        if source_input.transcript_json_path is None:
+            raise ValueError("ASR transcript JSON input requires transcript_json_path.")
+        return build_transcript_json_research_source(
+            source_input.transcript_json_path,
+            title=source_input.title or "",
+            source_url=source_input.source_url,
+            publisher=source_input.publisher,
+            speaker=source_input.speaker,
+            speakers=source_input.speakers,
+            published_date=source_input.published_date,
+            notes=source_input.notes,
         )
     raise ValueError(f"Unsupported input kind: {source_input.input_kind}")
