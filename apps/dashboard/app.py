@@ -10,8 +10,8 @@ from views.research_source_analysis import render_research_source_analysis_page
 from views.trade_concept import render_stock_concept_page
 
 
-APP_VERSION = "v0.9.0"
-APP_LAST_UPDATED = "2026-08-13"
+APP_VERSION = "v0.10.0"
+APP_LAST_UPDATED = "2026-08-22"
 DEFAULT_PAGE = "市場交易儀表板"
 
 st.set_page_config(page_title="個人股票投資系統", layout="wide")

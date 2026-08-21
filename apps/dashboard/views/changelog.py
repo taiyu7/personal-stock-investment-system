@@ -5,6 +5,16 @@ import streamlit as st
 
 FEATURE_LOG = [
     {
+        "version": "v0.10.0",
+        "title": "影片研究報告 MVP",
+        "items": [
+            "研究來源分析頁新增兩段式流程：先由影片 URL 取得逐字稿，再用逐字稿產生研究報告。",
+            "轉錄 provider 可選只產生 WAV、OpenAI 或 OpenVINO；研究彙整 provider 仍獨立選擇本機規則、OpenAI 或 Claude fallback。",
+            "Dashboard container 已內建 ffmpeg、Chromium、ChromeDriver 與 media-browser 依賴，公開影片可直接在瀏覽器介面執行轉錄流程。",
+            "OpenAI 音訊轉錄會先將長音訊切成 10 分鐘 MP3 chunks，降低長影片 input_too_large 風險。",
+        ],
+    },
+    {
         "version": "v0.9.0",
         "title": "第一階段研究來源分析工具",
         "items": [

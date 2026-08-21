@@ -270,4 +270,44 @@ browser media / local WAV
 
 - 更細緻的重試與 cost/usage metadata。
 - 專有詞彙 / 股票代號 prompt 或 `keywords` 支援。
-- Dashboard 端直接選轉錄 provider，而不是只從 CLI 使用。
+- Dashboard 端 provider 選擇已由 #60 完成；後續優化聚焦在多檔推理、股票代號驗證與 glossary。
+
+## #60 Dashboard 影片研究報告 MVP
+
+2026-08-22 完成 #60：Dashboard 端已可直接從影片 URL 產生逐字稿，再接研究報告。
+
+目前可運行流程：
+
+```text
+Dashboard 研究來源分析
+  -> 取得逐字稿
+     -> 影片 URL
+     -> transcription provider: none | openai | openvino
+     -> browser media acquisition
+     -> FFmpeg 16 kHz mono WAV
+     -> transcript JSON
+  -> 產生研究報告
+     -> ASR 逐字稿 JSON
+     -> analysis provider: rule_based_fallback | openai | anthropic_claude fallback
+     -> Markdown report
+     -> Dashboard display / download / Obsidian inbox / custom path
+```
+
+Dashboard container 配置：
+
+- apt：`ffmpeg`、`chromium`、`chromium-driver`。
+- Python extra：`media-browser`，包含 Selenium、webdriver-manager、yt-dlp。
+- Docker/Linux 預設：`/usr/bin/chromium`、`/usr/bin/chromedriver`、headless browser。
+- Windows 直接跑 UI 時保留 Windows Chrome / ChromeDriver 預設路徑。
+
+驗收狀態：
+
+- #50 CLI 已驗證 OpenAI 音訊轉錄可用，長音訊會切成 10 分鐘 MP3 chunks。
+- #60 Dashboard 已驗證可產生 WAV，並修正 container Chromium headless 啟動與 ASR status 顯示問題。
+- 完整單元測試於 v0.10.0 文件與版本更新後通過：`76 passed`。
+
+目前限制：
+
+- Docker Dashboard 使用乾淨 headless Chromium；若影片需要 Windows Chrome 登入狀態，仍可能要使用本機 CLI 或後續 profile 掛載策略。
+- 真實 YouTube CC / automatic captions adapter 尚未接上。
+- 尚未支援多檔逐字稿一起推理、股票代號清單校正與專有詞彙增強；後續分別由 #57、#58、#59 處理。
