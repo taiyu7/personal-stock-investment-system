@@ -12,6 +12,7 @@ services:
       ENABLE_LIVE_TRADING: "false"
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_RESEARCH_ANALYSIS_MODEL: ${OPENAI_RESEARCH_ANALYSIS_MODEL:-gpt-4.1-mini}
+      OPENAI_AUDIO_TRANSCRIPTION_MODEL: ${OPENAI_AUDIO_TRANSCRIPTION_MODEL:-gpt-4o-mini-transcribe}
     volumes:
       - ./src:/app/src
       - ./apps:/app/apps
@@ -32,6 +33,7 @@ services:
       ENABLE_LIVE_TRADING: "false"
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_RESEARCH_ANALYSIS_MODEL: ${OPENAI_RESEARCH_ANALYSIS_MODEL:-gpt-4.1-mini}
+      OPENAI_AUDIO_TRANSCRIPTION_MODEL: ${OPENAI_AUDIO_TRANSCRIPTION_MODEL:-gpt-4o-mini-transcribe}
     volumes:
       - ./src:/app/src
       - ./apps:/app/apps

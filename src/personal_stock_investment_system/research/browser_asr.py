@@ -9,6 +9,8 @@ from pathlib import Path
 
 from personal_stock_investment_system.research.asr import (
     AsrTranscriptionResult,
+    OpenAIAsrConfig,
+    OpenAIAsrTranscriber,
     OpenVINOAsrConfig,
     OpenVINOAsrTranscriber,
     SpeechToTextClient,
@@ -28,6 +30,9 @@ from personal_stock_investment_system.research.media import (
 )
 from personal_stock_investment_system.research.sources import ResearchSourceImportResult, SourceImportStatus
 
+DEFAULT_OPENVINO_TRANSCRIPT_OUTPUT_DIR = Path("data/processed/asr-transcripts/openvino")
+DEFAULT_OPENAI_TRANSCRIPT_OUTPUT_DIR = Path("data/processed/asr-transcripts/openai")
+
 
 @dataclass(frozen=True)
 class BrowserSessionAsrInput:
@@ -36,7 +41,8 @@ class BrowserSessionAsrInput:
     title: str = ""
     raw_output_dir: Path = Path("data/raw/browser-media")
     wav_output_dir: Path = Path("data/processed/asr-audio")
-    transcript_output_dir: Path = Path("data/processed/asr-transcripts/openvino")
+    transcript_output_dir: Path = DEFAULT_OPENVINO_TRANSCRIPT_OUTPUT_DIR
+    asr_provider: str = ""
     chrome_user_data_dir: Path | None = None
     chrome_profile_directory: str = ""
     chrome_binary_path: Path | None = None
@@ -46,6 +52,7 @@ class BrowserSessionAsrInput:
     playback_wait_seconds: float = 10.0
     openvino_model_dir: Path | None = None
     openvino_device: str = "GPU"
+    openai_transcription_model: str = ""
     language: str = "zh"
     task: str = "transcribe"
     ytdlp_cookies_from_browser: str = ""
@@ -120,6 +127,7 @@ def main(argv: list[str] | None = None) -> int:
             raw_output_dir=args.raw_output_dir,
             wav_output_dir=args.wav_output_dir,
             transcript_output_dir=args.transcript_output_dir,
+            asr_provider=args.asr_provider,
             chrome_user_data_dir=args.chrome_user_data_dir,
             chrome_profile_directory=args.chrome_profile_directory,
             chrome_binary_path=args.chrome_binary_path,
@@ -129,6 +137,7 @@ def main(argv: list[str] | None = None) -> int:
             playback_wait_seconds=args.playback_wait_seconds,
             openvino_model_dir=args.openvino_model_dir,
             openvino_device=args.openvino_device,
+            openai_transcription_model=args.openai_transcription_model,
             language=args.language,
             task=args.task,
             ytdlp_cookies_from_browser=args.yt_dlp_cookies_from_browser,
@@ -189,27 +198,50 @@ class _PageUrlYtDlpMediaDownloader(YtDlpMediaDownloader):
 
 
 def _default_transcriber(source_input: BrowserSessionAsrInput) -> SpeechToTextClient | None:
-    if source_input.openvino_model_dir is None:
+    provider = source_input.asr_provider or ("openvino" if source_input.openvino_model_dir is not None else "none")
+    if provider == "none":
         return None
-    return OpenVINOAsrTranscriber(
-        OpenVINOAsrConfig(
-            model_dir=source_input.openvino_model_dir,
-            device=source_input.openvino_device,
-            output_dir=source_input.transcript_output_dir,
-            language=source_input.language,
-            task=source_input.task,
+    if provider == "openai":
+        return OpenAIAsrTranscriber(
+            OpenAIAsrConfig(
+                model=source_input.openai_transcription_model,
+                output_dir=_transcript_output_dir(source_input, "openai"),
+                language=source_input.language,
+            )
         )
-    )
+    if provider == "openvino" and source_input.openvino_model_dir is not None:
+        return OpenVINOAsrTranscriber(
+            OpenVINOAsrConfig(
+                model_dir=source_input.openvino_model_dir,
+                device=source_input.openvino_device,
+                output_dir=_transcript_output_dir(source_input, "openvino"),
+                language=source_input.language,
+                task=source_input.task,
+            )
+        )
+    return None
+
+
+def _transcript_output_dir(source_input: BrowserSessionAsrInput, provider: str) -> Path:
+    if provider == "openai" and source_input.transcript_output_dir == DEFAULT_OPENVINO_TRANSCRIPT_OUTPUT_DIR:
+        return DEFAULT_OPENAI_TRANSCRIPT_OUTPUT_DIR
+    return source_input.transcript_output_dir
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Acquire browser-session media and optionally transcribe it with OpenVINO ASR.")
+    parser = argparse.ArgumentParser(description="Acquire browser-session media and optionally transcribe it with ASR.")
     parser.add_argument("url", help="Page URL to open with a browser session.")
     parser.add_argument("--title", default="", help="Research source title.")
     parser.add_argument("--output-stem", default="", help="Filename stem for the generated ASR-ready WAV.")
     parser.add_argument("--raw-output-dir", type=Path, default=Path("data/raw/browser-media"))
     parser.add_argument("--wav-output-dir", type=Path, default=Path("data/processed/asr-audio"))
-    parser.add_argument("--transcript-output-dir", type=Path, default=Path("data/processed/asr-transcripts/openvino"))
+    parser.add_argument("--transcript-output-dir", type=Path, default=DEFAULT_OPENVINO_TRANSCRIPT_OUTPUT_DIR)
+    parser.add_argument(
+        "--asr-provider",
+        choices=("none", "openvino", "openai"),
+        default="",
+        help="ASR provider. Default: openvino when --openvino-model-dir is set, otherwise none.",
+    )
     parser.add_argument("--chrome-user-data-dir", type=Path, default=None)
     parser.add_argument("--chrome-profile-directory", default="")
     parser.add_argument("--chrome-binary-path", type=Path, default=None)
@@ -219,6 +251,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--playback-wait-seconds", type=float, default=10.0)
     parser.add_argument("--openvino-model-dir", type=Path, default=None)
     parser.add_argument("--openvino-device", default="GPU")
+    parser.add_argument("--openai-transcription-model", default="")
     parser.add_argument("--language", default="zh")
     parser.add_argument("--task", default="transcribe")
     parser.add_argument("--yt-dlp-cookies-from-browser", default="")
@@ -240,6 +273,8 @@ def _format_cli_result(result: BrowserSessionAsrResult) -> str:
     if result.transcription is not None:
         lines.append(f"asr_status={result.transcription.status}")
         lines.append(f"transcript_path={result.transcription.transcript_path or ''}")
+        if result.transcription.error:
+            lines.append(f"asr_error={result.transcription.error}")
     if result.source_import_result is not None:
         lines.append(f"source_status={result.source_import_result.status}")
         lines.append(f"source_identifier={result.source_import_result.source_identifier}")
