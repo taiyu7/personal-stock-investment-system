@@ -121,10 +121,11 @@ class OpenVINOAsrConfig:
     output_dir: Path | None = None
     language: str = "zh"
     task: str = "transcribe"
+    chunk_length_seconds: float = 25.0
 
 
 class OpenVINOTranscriptionRunner(Protocol):
-    def transcribe(self, audio_path: Path) -> str:
+    def transcribe(self, audio_path: Path) -> str | tuple[AsrTranscriptSegment, ...]:
         """Transcribe an audio file using an OpenVINO-backed ASR model."""
 
 
@@ -159,7 +160,7 @@ class OpenVINOAsrTranscriber:
         transcript_path = output_dir / f"{resolved_audio_path.stem}.json"
 
         try:
-            text = (self._runner or _OpenVINOAsrRunner(self.config)).transcribe(resolved_audio_path).strip()
+            runner_output = (self._runner or _OpenVINOAsrRunner(self.config)).transcribe(resolved_audio_path)
         except ImportError as error:
             return AsrTranscriptionResult(
                 segments=(),
@@ -182,7 +183,10 @@ class OpenVINOAsrTranscriber:
                 error=str(error),
             )
 
-        if not text:
+        segments = _openvino_segments_from_runner_output(runner_output)
+        text = "\n".join(segment.text for segment in segments).strip()
+
+        if not segments or not text:
             return AsrTranscriptionResult(
                 segments=(),
                 transcript_path=transcript_path,
@@ -192,14 +196,17 @@ class OpenVINOAsrTranscriber:
 
         payload = {
             "text": text,
-            "segments": [{"start": None, "end": None, "text": text}],
+            "segments": [
+                {"start": segment.start_seconds, "end": segment.end_seconds, "text": segment.text}
+                for segment in segments
+            ],
             "backend": "openvino",
             "device": self.config.device,
             "model_dir": str(model_dir),
         }
         transcript_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         return AsrTranscriptionResult(
-            segments=(AsrTranscriptSegment(text=text),),
+            segments=segments,
             transcript_path=transcript_path,
             status_message=f"OpenVINO ASR 逐字稿可用。device={self.config.device}",
         )
@@ -268,20 +275,51 @@ class _OpenVINOAsrRunner:
     def __init__(self, config: OpenVINOAsrConfig) -> None:
         self.config = config
 
-    def transcribe(self, audio_path: Path) -> str:
+    def transcribe(self, audio_path: Path) -> tuple[AsrTranscriptSegment, ...]:
         from optimum.intel.openvino import OVModelForSpeechSeq2Seq
         from transformers import AutoProcessor
 
         samples, sample_rate = _read_pcm_wav(audio_path)
         processor = AutoProcessor.from_pretrained(self.config.model_dir)
         model = OVModelForSpeechSeq2Seq.from_pretrained(self.config.model_dir, device=self.config.device)
-        inputs = processor(samples, sampling_rate=sample_rate, return_tensors="pt")
-        generated_ids = model.generate(
-            **inputs,
-            language=self.config.language,
-            task=self.config.task,
-        )
-        return str(processor.batch_decode(generated_ids, skip_special_tokens=True)[0])
+        segments: list[AsrTranscriptSegment] = []
+        for start_frame, end_frame in _sample_windows(len(samples), sample_rate, self.config.chunk_length_seconds):
+            chunk = samples[start_frame:end_frame]
+            if not len(chunk):
+                continue
+            inputs = processor(chunk, sampling_rate=sample_rate, return_tensors="pt")
+            generated_ids = model.generate(
+                **inputs,
+                language=self.config.language,
+                task=self.config.task,
+            )
+            text = str(processor.batch_decode(generated_ids, skip_special_tokens=True)[0]).strip()
+            if text:
+                segments.append(
+                    AsrTranscriptSegment(
+                        text=text,
+                        start_seconds=start_frame / sample_rate,
+                        end_seconds=end_frame / sample_rate,
+                    )
+                )
+        return tuple(segments)
+
+
+def _openvino_segments_from_runner_output(
+    runner_output: str | tuple[AsrTranscriptSegment, ...],
+) -> tuple[AsrTranscriptSegment, ...]:
+    if isinstance(runner_output, str):
+        text = runner_output.strip()
+        return (AsrTranscriptSegment(text=text),) if text else ()
+    return tuple(segment for segment in runner_output if segment.text.strip())
+
+
+def _sample_windows(sample_count: int, sample_rate: int, chunk_length_seconds: float):
+    if sample_count <= 0:
+        return
+    chunk_size = int(max(1.0, chunk_length_seconds) * sample_rate)
+    for start in range(0, sample_count, chunk_size):
+        yield start, min(sample_count, start + chunk_size)
 
 
 def _read_pcm_wav(audio_path: Path):

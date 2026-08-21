@@ -127,3 +127,55 @@ docker compose run --rm app pytest tests/test_media_acquisition.py tests/test_as
 ```
 
 Docker 測試結果：`16 passed`。
+
+## #49 Browser Session 到 OpenVINO ASR 一鍵入口
+
+2026-08-16 已開 #49：`https://github.com/taiyu7/personal-stock-investment-system/issues/49`
+
+第一版入口已新增：
+
+- `src/personal_stock_investment_system/research/browser_asr.py`
+  - `BrowserSessionAsrInput`
+  - `BrowserSessionAsrResult`
+  - `run_browser_session_asr_pipeline()`
+- `src/personal_stock_investment_system/research/browser_asr_cli.py`
+- console script：`psis-browser-asr`
+- `tests/test_browser_asr_entrypoint.py`
+
+命令用途：
+
+```text
+URL
+  -> SeleniumBrowserMediaDiscovery
+  -> BrowserSessionMediaAcquirer
+  -> yt-dlp download
+  -> FFmpeg 16 kHz mono WAV
+  -> optional OpenVINO ASR
+  -> optional ResearchSourceImportResult
+```
+
+入口支援兩種模式：
+
+- 不傳 `--openvino-model-dir`：只產生 ASR-ready WAV。
+- 傳 `--openvino-model-dir`：產生 WAV 後接 OpenVINO ASR，並建立 local audio research source import result。
+
+驗證結果：
+
+```powershell
+python -m compileall src\personal_stock_investment_system\research tests\test_browser_asr_entrypoint.py
+docker compose run --rm app pytest tests/test_browser_asr_entrypoint.py tests/test_media_acquisition.py tests/test_asr_research.py
+docker compose run --rm app python -m personal_stock_investment_system.research.browser_asr_cli --help
+```
+
+Docker 測試結果：`18 passed`。
+
+2026-08-16 本機驗證補充：
+
+- Chrome 151 需要對應 ChromeDriver 151；舊 Selenium crawler 的 ChromeDriver 139 不適用。
+- Windows 本機 Selenium 需要 `--no-sandbox`、停用 GPU/Vulkan automation 路徑與 `--remote-debugging-pipe`，否則會遇到 Chrome/tab crash。
+- YouTube UI 音效 request 需排除，例如 `/s/search/audio/*.mp3`；真正媒體 request 通常是 `googlevideo.com/videoplayback`。
+- YouTube 會員影片裸 `videoplayback` URL 可能 403；實測成功路線是讓 yt-dlp 使用 page URL、Chrome profile cookie 與 `--remote-components ejs:github`。
+- 成功產出：`data/processed/asr-audio/browser-test-cli-cookie-16k-mono.wav`，格式為 PCM signed 16-bit little-endian、16 kHz、mono，長度約 44:03。
+- Docker 相關單元測試：`19 passed`。
+- OpenVINO adapter 長音檔補充：直接把 3 分 20 秒 WAV 丟進 OpenVINO `generate()` 只會得到前段短稿；已改為預設 25 秒分段轉錄，`sample-video-16k-mono.wav` 實測產生 8 個 timestamped segments，文字覆蓋 0.0 到 199.808 秒。
+- Docker 相關單元測試更新：`20 passed`。

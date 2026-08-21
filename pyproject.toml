@@ -15,6 +15,9 @@ dependencies = [
     "yfinance>=0.2.40",
 ]
 
+[project.scripts]
+psis-browser-asr = "personal_stock_investment_system.research.browser_asr_cli:main"
+
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
 pdf = ["pymupdf4llm>=0.0.27"]

@@ -12,6 +12,7 @@ from personal_stock_investment_system.research import (
     SeleniumBrowserSessionConfig,
     YtDlpMediaDownloader,
     extract_media_requests_from_chrome_performance_logs,
+    select_downloadable_media_request,
     select_stream_manifest,
 )
 
@@ -58,6 +59,17 @@ def test_select_stream_manifest_prefers_m3u8():
     selected = select_stream_manifest(requests)
 
     assert selected == requests[1]
+
+
+def test_select_downloadable_media_request_falls_back_to_video_request():
+    requests = (
+        DiscoveredMediaRequest("https://rr.example.test/videoplayback?id=abc"),
+        DiscoveredMediaRequest("https://cdn.example.test/audio.m4a"),
+    )
+
+    selected = select_downloadable_media_request(requests)
+
+    assert selected == requests[0]
 
 
 class FakeDiscovery:
@@ -144,6 +156,7 @@ def test_chrome_performance_log_discovery_ignores_page_url():
             "https://cdn.example.test/index.m3u8",
             content_type="application/vnd.apple.mpegurl",
             method="Network.responseReceived",
+            headers=(("Content-Type", "application/vnd.apple.mpegurl"),),
         ),
     )
 
@@ -184,7 +197,13 @@ def test_selenium_browser_media_discovery_uses_existing_driver_boundary():
     driver = FakeBrowserDriver()
     sleeps: list[float] = []
     discovery = SeleniumBrowserMediaDiscovery(
-        config=SeleniumBrowserSessionConfig(page_load_timeout_seconds=42, settle_seconds=0.5, playback_wait_seconds=1.5),
+        config=SeleniumBrowserSessionConfig(
+            chrome_binary_path=Path("C:/Program Files/Google/Chrome/Application/chrome.exe"),
+            chromedriver_path=Path("data/local/chromedriver/chromedriver-win64/chromedriver.exe"),
+            page_load_timeout_seconds=42,
+            settle_seconds=0.5,
+            playback_wait_seconds=1.5,
+        ),
         driver_factory=lambda config: driver,
         sleeper=sleeps.append,
     )
