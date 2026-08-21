@@ -23,6 +23,9 @@ services:
   dashboard:
     build:
       context: .
+      args:
+        INSTALL_APT_PACKAGES: ffmpeg chromium chromium-driver
+        INSTALL_EXTRAS: media-browser
     image: personal-stock-investment-system-dev
     working_dir: /app
     environment:
