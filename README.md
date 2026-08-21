@@ -75,12 +75,13 @@ AI Orchestrator 負責任務分派、流程編排與結果整合，不直接保�
 
 研究來源分析目前是第一階段 MVP：YouTube URL 會解析 video id 並顯示逐字稿 fallback 狀態，但尚未實際抓取 YouTube CC 或 automatic captions。若要分析影片內容，目前可手動貼上逐字稿、貼上 #49 產出的 ASR 逐字稿 JSON 路徑，或先提供摘要；後續會補真實字幕 adapter。
 
-### #51 研究彙整 provider
+### #51 / #55 研究彙整 provider
 
 已新增研究彙整 provider 邊界。Dashboard 目前可選：
 
 - `本機規則 fallback`：目前可用，沿用保守 rule-based 分析器。
-- `OpenAI` / `Claude`：目前會明確標示尚未接上 API，並回退本機規則 fallback；後續再接真實 API adapter、secrets、usage / cost 記錄與 schema validation。
+- `OpenAI`：#55 已接上 OpenAI Responses API client。Docker Compose 會從 `.env` 讀取 `OPENAI_API_KEY` 與 `OPENAI_RESEARCH_ANALYSIS_MODEL`，再傳入 `app` / `dashboard` container。若未設定 API key 或 API 回傳無法解析，系統會明確標示失敗並回退本機規則 fallback。
+- `Claude`：目前會明確標示尚未接上 API，並回退本機規則 fallback；後續再接真實 API adapter、secrets、usage / cost 記錄與 schema validation。
 
 預設觀察清單分為：
 
@@ -324,10 +325,68 @@ python -m streamlit run apps\dashboard\app.py
 - `DATABASE_URL`：預設 SQLite，保留其他資料庫擴充能力。
 - `MARKET_DATA_PROVIDER`、`MARKET_DATA_API_KEY`：未來新增行情來源。
 - `MCP_SERVER_HOST`、`MCP_SERVER_PORT`：未來 MCP server。
-- `OPENAI_API_KEY`、`ANTHROPIC_API_KEY`、`GOOGLE_API_KEY`：未來 AI clients。
+- `OPENAI_API_KEY`：OpenAI API project key；到 <https://platform.openai.com/api-keys> 建立後填入本機 `.env`。
+- `OPENAI_RESEARCH_ANALYSIS_MODEL`：研究彙整使用的 OpenAI 模型，預設 `gpt-4.1-mini`。
+- `ANTHROPIC_API_KEY`、`GOOGLE_API_KEY`：未來 AI clients。
 - `ENABLE_LIVE_TRADING=false`：預設禁止實盤交易。
 
-請勿將 `.env`、API 金鑰或本機資料庫提交到 Git。
+第一次設定可直接複製範本：
+
+```powershell
+Copy-Item .env.example .env
+```
+
+填好 `.env` 後重新啟動 Docker Compose，`app` 與 `dashboard` container 會取得對應環境變數。請勿將 `.env`、API 金鑰或本機資料庫提交到 Git。
+
+### OpenAI API 除錯
+
+若 Dashboard 顯示「OpenAI 彙整失敗，已改用本機規則 fallback 產生報告」，先確認 Docker container 有讀到 `.env`，且不要把 API key 本體印出來：
+
+```powershell
+$debugScript = @'
+import os
+from personal_stock_investment_system.research import (
+    ResearchSource,
+    ResearchAnalysisSettings,
+    analyze_research_source_with_provider,
+)
+
+print("OPENAI_API_KEY set:", bool(os.getenv("OPENAI_API_KEY")))
+print("OPENAI_RESEARCH_ANALYSIS_MODEL:", os.getenv("OPENAI_RESEARCH_ANALYSIS_MODEL"))
+
+source = ResearchSource(
+    source_type="manual_text",
+    title="OpenAI debug",
+    raw_text="[00:00:10] 研究員 A 認為 2330 台積電受惠 AI 伺服器需求，方向偏多。",
+)
+
+result = analyze_research_source_with_provider(
+    source,
+    settings=ResearchAnalysisSettings(provider="openai"),
+)
+
+print("status:", result.status)
+print("provider:", result.provider)
+print("model:", result.model)
+print("status_message:", result.status_message)
+print("error:", result.error)
+'@
+
+$debugScript | docker compose run --rm -T app python -
+```
+
+判讀方式：
+
+- `OPENAI_API_KEY set: False`：Docker 沒讀到 `.env`，確認 `.env` 是否在專案根目錄，然後重啟 Docker Compose。
+- `OPENAI_API_KEY set: True` 但 `error` 顯示 `insufficient_quota` / `429`：API key 已進 container，但 OpenAI 帳號額度不足或 billing / usage limit 需要處理。
+- `status: available`：OpenAI 彙整成功。
+
+處理 `.env` 或 billing 後，通常不需要 rebuild Docker，只要重啟 Dashboard：
+
+```powershell
+docker compose down
+docker compose up dashboard
+```
 
 ## 測試
 

@@ -2,6 +2,7 @@
 
 from personal_stock_investment_system.research.analysis import analyze_research_source
 from personal_stock_investment_system.research.analysis_provider import (
+    OpenAIResearchAnalysisClient,
     ResearchAnalysisClient,
     ResearchAnalysisProviderName,
     ResearchAnalysisResult,
@@ -97,6 +98,7 @@ from personal_stock_investment_system.research.youtube import (
 __all__ = [
     "CompanyProfileNote",
     "ResearchReport",
+    "OpenAIResearchAnalysisClient",
     "ResearchAnalysisClient",
     "ResearchAnalysisProviderName",
     "ResearchAnalysisResult",

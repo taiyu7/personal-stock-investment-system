@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import streamlit as st
@@ -23,7 +24,7 @@ INPUT_KIND_OPTIONS = {
 
 ANALYSIS_PROVIDER_OPTIONS = {
     "本機規則 fallback": "rule_based_fallback",
-    "OpenAI（尚未接 API）": "openai",
+    "OpenAI": "openai",
     "Claude（尚未接 API）": "anthropic_claude",
 }
 
@@ -70,9 +71,16 @@ def render_research_source_analysis_page() -> None:
         default="本機規則 fallback",
     )
     analysis_provider = ANALYSIS_PROVIDER_OPTIONS[analysis_label]
-    analysis_model = st.text_input("模型／版本", value="rule_based_v1" if analysis_provider == "rule_based_fallback" else "")
-    if analysis_provider != "rule_based_fallback":
-        st.warning("這個 provider 還沒有接上真實 API；本次會明確標示未支援並改用本機規則 fallback。")
+    default_model = "rule_based_v1"
+    if analysis_provider == "openai":
+        default_model = os.getenv("OPENAI_RESEARCH_ANALYSIS_MODEL", "gpt-4.1-mini")
+    elif analysis_provider == "anthropic_claude":
+        default_model = ""
+    analysis_model = st.text_input("模型／版本", value=default_model)
+    if analysis_provider == "openai" and not os.getenv("OPENAI_API_KEY"):
+        st.warning("尚未設定 OPENAI_API_KEY；本次會改用本機規則 fallback。")
+    if analysis_provider == "anthropic_claude":
+        st.warning("Claude provider 還沒有接上真實 API；本次會明確標示未支援並改用本機規則 fallback。")
 
     st.markdown("### 輸出目的地")
     write_to_obsidian = st.checkbox("輸出到 Obsidian inbox", value=True)
