@@ -8,6 +8,7 @@ from personal_stock_investment_system.research import (
     MediaArtifact,
     run_browser_session_asr_pipeline,
 )
+from personal_stock_investment_system.research.browser_asr import _format_cli_result
 
 
 class FakeDiscovery:
@@ -95,3 +96,33 @@ def test_browser_session_asr_pipeline_can_build_research_source_after_transcript
     assert result.source_import_result.source.source_url == "https://example.test/member-video"
     assert "[00:01] 投顧提到 2330 與 AI 需求" in result.source_import_result.source.raw_text
     assert speech_to_text.audio_path == (tmp_path / "wav" / "episode-1-16k-mono.wav").resolve()
+
+
+def test_browser_session_asr_cli_result_includes_transcription_error(tmp_path):
+    class FailingSpeechToText:
+        def transcribe(self, audio_path: Path) -> AsrTranscriptionResult:
+            return AsrTranscriptionResult(
+                segments=(),
+                transcript_path=audio_path.parent / "sample.json",
+                status="transcript_unavailable",
+                status_message="OpenAI ASR 轉錄失敗。",
+                error="input_too_large",
+            )
+
+    result = run_browser_session_asr_pipeline(
+        BrowserSessionAsrInput(
+            page_url="https://example.test/member-video",
+            output_stem="episode-1",
+            raw_output_dir=tmp_path / "raw",
+            wav_output_dir=tmp_path / "wav",
+        ),
+        discovery=FakeDiscovery(),
+        downloader=FakeDownloader(),
+        preprocessor=FakePreprocessor(),
+        speech_to_text=FailingSpeechToText(),
+    )
+
+    output = _format_cli_result(result)
+
+    assert "asr_status=transcript_unavailable" in output
+    assert "asr_error=input_too_large" in output

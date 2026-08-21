@@ -4,11 +4,14 @@ from personal_stock_investment_system.research import (
     AsrTranscriptSegment,
     AsrTranscriptionResult,
     BreezeAsrCliTranscriber,
+    OpenAIAsrConfig,
+    OpenAIAsrTranscriber,
     OpenVINOAsrConfig,
     OpenVINOAsrTranscriber,
     build_local_audio_research_source,
 )
 from personal_stock_investment_system.research.asr import _segments_from_whisper_json
+from personal_stock_investment_system.research.asr import _openai_segments_from_chunk_payloads
 from personal_stock_investment_system.research.asr import normalize_whisper_json_encoding
 
 
@@ -39,6 +42,37 @@ class FakeSegmentOpenVINORunner:
             AsrTranscriptSegment("第一段內容。", 0.0, 25.0),
             AsrTranscriptSegment("第二段內容。", 25.0, 50.0),
         )
+
+
+class FakeOpenAITranscriptionResponse:
+    def model_dump(self):
+        return {
+            "text": "研究員提到 2330 台積電與 2303 聯電。",
+            "segments": [
+                {"start": 0.0, "end": 3.5, "text": "研究員提到 2330 台積電。"},
+                {"start": 3.5, "end": 6.0, "text": "也提到 2303 聯電。"},
+            ],
+            "usage": {"type": "tokens", "total_tokens": 123},
+        }
+
+
+class FakeOpenAITranscriptions:
+    def __init__(self) -> None:
+        self.kwargs = {}
+
+    def create(self, **kwargs: object) -> FakeOpenAITranscriptionResponse:
+        self.kwargs = kwargs
+        return FakeOpenAITranscriptionResponse()
+
+
+class FakeOpenAIAudio:
+    def __init__(self) -> None:
+        self.transcriptions = FakeOpenAITranscriptions()
+
+
+class FakeOpenAIClient:
+    def __init__(self) -> None:
+        self.audio = FakeOpenAIAudio()
 
 
 def test_build_local_audio_research_source_from_asr_segments(tmp_path):
@@ -142,6 +176,65 @@ def test_openvino_asr_transcriber_reports_missing_model_without_runner(tmp_path)
     assert result.status == "unsupported_source"
     assert result.segments == ()
     assert "模型目錄" in result.status_message
+
+
+def test_openai_asr_transcriber_writes_transcript_json_from_fake_response(tmp_path):
+    audio_path = tmp_path / "sample.wav"
+    audio_path.write_bytes(b"fake wav")
+    output_dir = tmp_path / "openai-transcripts"
+    fake_client = FakeOpenAIClient()
+    transcriber = OpenAIAsrTranscriber(
+        OpenAIAsrConfig(
+            model="gpt-test-transcribe",
+            output_dir=output_dir,
+            language="zh",
+        ),
+        api_key="test-key",
+        client=fake_client,
+    )
+
+    result = transcriber.transcribe(audio_path)
+
+    assert result.status == "available"
+    assert result.segments == (
+        AsrTranscriptSegment("研究員提到 2330 台積電。", 0.0, 3.5),
+        AsrTranscriptSegment("也提到 2303 聯電。", 3.5, 6.0),
+    )
+    assert result.transcript_path == output_dir / "sample.json"
+    transcript_text = result.transcript_path.read_text(encoding="utf-8")
+    assert '"backend": "openai"' in transcript_text
+    assert '"model": "gpt-test-transcribe"' in transcript_text
+    assert '"total_tokens": 123' in transcript_text
+    assert fake_client.audio.transcriptions.kwargs["model"] == "gpt-test-transcribe"
+    assert fake_client.audio.transcriptions.kwargs["language"] == "zh"
+    assert fake_client.audio.transcriptions.kwargs["response_format"] == "json"
+
+
+def test_openai_asr_transcriber_reports_missing_api_key(tmp_path, monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    audio_path = tmp_path / "sample.wav"
+    audio_path.write_bytes(b"fake wav")
+
+    result = OpenAIAsrTranscriber(OpenAIAsrConfig(model="gpt-test-transcribe")).transcribe(audio_path)
+
+    assert result.status == "unsupported_source"
+    assert result.error == "missing_openai_api_key"
+    assert "OPENAI_API_KEY" in result.status_message
+
+
+def test_openai_chunk_payloads_are_combined_with_offsets():
+    segments = _openai_segments_from_chunk_payloads(
+        [
+            {"text": "第一段", "segments": [{"start": 1.0, "end": 2.0, "text": "第一段"}]},
+            {"text": "第二段"},
+        ],
+        chunk_length_seconds=600.0,
+    )
+
+    assert segments == (
+        AsrTranscriptSegment("第一段", 1.0, 2.0),
+        AsrTranscriptSegment("第二段", 600.0, None),
+    )
 
 
 def test_build_local_audio_research_source_from_openvino_segments(tmp_path):

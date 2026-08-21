@@ -327,6 +327,7 @@ python -m streamlit run apps\dashboard\app.py
 - `MCP_SERVER_HOST`、`MCP_SERVER_PORT`：未來 MCP server。
 - `OPENAI_API_KEY`：OpenAI API project key；到 <https://platform.openai.com/api-keys> 建立後填入本機 `.env`。
 - `OPENAI_RESEARCH_ANALYSIS_MODEL`：研究彙整使用的 OpenAI 模型，預設 `gpt-4.1-mini`。
+- `OPENAI_AUDIO_TRANSCRIPTION_MODEL`：OpenAI 音訊轉錄使用的模型，預設 `gpt-4o-mini-transcribe`。
 - `ANTHROPIC_API_KEY`、`GOOGLE_API_KEY`：未來 AI clients。
 - `ENABLE_LIVE_TRADING=false`：預設禁止實盤交易。
 
@@ -504,6 +505,20 @@ psis-browser-asr "https://example.com/member-video" `
   --openvino-model-dir data\local\openvino\breeze-asr-25-fp32 `
   --openvino-device GPU
 ```
+
+#50 新增 OpenAI 音訊轉錄 provider。填好 `.env` 的 `OPENAI_API_KEY` 後，可以改用 OpenAI 轉錄：
+
+```powershell
+psis-browser-asr "https://example.com/member-video" `
+  --chrome-user-data-dir "C:\Users\taiyu\AppData\Local\Google\Chrome\User Data" `
+  --chrome-profile-directory "Default" `
+  --output-stem sample-video `
+  --asr-provider openai
+```
+
+OpenAI 轉錄預設會輸出到 `data/processed/asr-transcripts/openai/`。若不指定 `--asr-provider`，舊行為維持相容：有傳 `--openvino-model-dir` 時走 OpenVINO，否則只產生 ASR-ready WAV。
+
+OpenAI Audio API 有上傳大小與長音訊限制；即使先壓成小於 25 MB，長音訊仍可能因 `input_too_large` 失敗。因此 `OpenAIAsrTranscriber` 會先用 FFmpeg 將音訊切成 10 分鐘 MP3 chunks，再逐段送 OpenAI ASR，最後合併成同一份 transcript JSON。若 OpenAI ASR 失敗，CLI 會輸出 `asr_error=...` 方便判斷是 quota、key、模型權限或輸入過大。
 
 輸出重點：
 

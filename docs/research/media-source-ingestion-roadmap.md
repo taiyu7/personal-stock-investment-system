@@ -241,3 +241,33 @@ Docker 測試結果：`18 passed`。
 - 重試、timeout 與長逐字稿切段彙整。
 - Claude provider 真實 API adapter。
 - #50 OpenAI 音訊轉錄 provider。
+
+## #50 OpenAI 音訊轉錄 Provider
+
+2026-08-22 開始 #50：OpenAI 音訊轉錄 provider 與本機 OpenVINO 並列。
+
+MVP 目標：
+
+```text
+browser media / local WAV
+  -> ASR provider: openvino | openai
+  -> transcript JSON
+  -> #51/#55 research analysis provider
+  -> Markdown report
+```
+
+已實作方向：
+
+- 新增 `OpenAIAsrTranscriber`，沿用既有 `SpeechToTextClient` 介面。
+- 新增 `OPENAI_AUDIO_TRANSCRIPTION_MODEL`，預設 `gpt-4o-mini-transcribe`。
+- `psis-browser-asr` 新增 `--asr-provider none|openvino|openai` 與 `--openai-transcription-model`。
+- 舊行為維持相容：未指定 provider 時，有 `--openvino-model-dir` 走 OpenVINO，否則只產生 ASR-ready WAV。
+- OpenAI provider 預設 transcript JSON 輸出到 `data/processed/asr-transcripts/openai/`。
+- 實測 44 分鐘 WAV 壓成 7.69 MB MP3 後仍可能觸發 `input_too_large`，因此 OpenAI provider 會先用 FFmpeg 切成 10 分鐘 MP3 chunks，再逐段送 OpenAI 並合併 transcript JSON。
+- CLI 會輸出 `asr_error=...`，避免只看到 `transcript_unavailable` 而不知道真正原因。
+
+後續優化：
+
+- 更細緻的重試與 cost/usage metadata。
+- 專有詞彙 / 股票代號 prompt 或 `keywords` 支援。
+- Dashboard 端直接選轉錄 provider，而不是只從 CLI 使用。

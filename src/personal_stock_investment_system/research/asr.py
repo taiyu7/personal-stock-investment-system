@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import wave
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from personal_stock_investment_system.research.sources import ResearchSource, ResearchSourceImportResult, SourceImportStatus
 
 DEFAULT_BREEZE_ASR_MODEL = "breeze-asr-25"
+DEFAULT_OPENAI_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe"
 
 
 @dataclass(frozen=True)
@@ -212,6 +214,186 @@ class OpenVINOAsrTranscriber:
         )
 
 
+@dataclass(frozen=True)
+class OpenAIAsrConfig:
+    model: str = DEFAULT_OPENAI_TRANSCRIPTION_MODEL
+    output_dir: Path | None = None
+    language: str = "zh"
+    prompt: str = ""
+    response_format: str = "json"
+    chunk_length_seconds: float = 600.0
+    chunk_bitrate: str = "32k"
+    ffmpeg_executable: str = "ffmpeg"
+
+
+class OpenAIAudioTranscriptionsClient(Protocol):
+    class Audio(Protocol):
+        class Transcriptions(Protocol):
+            def create(self, **kwargs: object) -> object:
+                """Create an OpenAI audio transcription."""
+
+        transcriptions: Transcriptions
+
+    audio: Audio
+
+
+class OpenAIAsrTranscriber:
+    """Transcribe an audio file with OpenAI Audio Transcriptions API."""
+
+    def __init__(
+        self,
+        config: OpenAIAsrConfig | None = None,
+        *,
+        api_key: str | None = None,
+        client: OpenAIAudioTranscriptionsClient | None = None,
+    ) -> None:
+        env_model = os.getenv("OPENAI_AUDIO_TRANSCRIPTION_MODEL", "")
+        resolved_config = config or OpenAIAsrConfig(model=env_model or DEFAULT_OPENAI_TRANSCRIPTION_MODEL)
+        self.config = OpenAIAsrConfig(
+            model=resolved_config.model or env_model or DEFAULT_OPENAI_TRANSCRIPTION_MODEL,
+            output_dir=resolved_config.output_dir,
+            language=resolved_config.language,
+            prompt=resolved_config.prompt,
+            response_format=resolved_config.response_format,
+            chunk_length_seconds=resolved_config.chunk_length_seconds,
+            chunk_bitrate=resolved_config.chunk_bitrate,
+            ffmpeg_executable=resolved_config.ffmpeg_executable,
+        )
+        self.api_key = api_key if api_key is not None else os.getenv("OPENAI_API_KEY", "")
+        self._client = client
+
+    def transcribe(self, audio_path: Path) -> AsrTranscriptionResult:
+        resolved_audio_path = audio_path.expanduser().resolve()
+        if not resolved_audio_path.exists():
+            return AsrTranscriptionResult(
+                segments=(),
+                status="media_unavailable",
+                status_message="音訊檔不存在，無法執行 OpenAI ASR。",
+                error=str(resolved_audio_path),
+            )
+        if not self.api_key and self._client is None:
+            return AsrTranscriptionResult(
+                segments=(),
+                status="unsupported_source",
+                status_message="缺少 OPENAI_API_KEY，無法執行 OpenAI ASR。",
+                error="missing_openai_api_key",
+            )
+
+        output_dir = (self.config.output_dir or resolved_audio_path.parent / "openai-transcripts").expanduser().resolve()
+        output_dir.mkdir(parents=True, exist_ok=True)
+        transcript_path = output_dir / f"{resolved_audio_path.stem}.json"
+
+        try:
+            chunk_paths = self._audio_chunks(resolved_audio_path, output_dir)
+            chunk_payloads = [
+                _openai_transcription_payload(self._transcriptions_create(chunk_path))
+                for chunk_path in chunk_paths
+            ]
+        except Exception as error:  # noqa: BLE001 - provider boundary returns explicit ASR status.
+            return AsrTranscriptionResult(
+                segments=(),
+                transcript_path=transcript_path,
+                status="transcript_unavailable",
+                status_message="OpenAI ASR 轉錄失敗。",
+                error=str(error),
+            )
+
+        segments = _openai_segments_from_chunk_payloads(chunk_payloads, self.config.chunk_length_seconds)
+        text = "\n".join(segment.text for segment in segments).strip()
+
+        if not text:
+            return AsrTranscriptionResult(
+                segments=(),
+                transcript_path=transcript_path,
+                status="transcript_unavailable",
+                status_message="OpenAI ASR 未產生文字。",
+            )
+
+        transcript_payload: dict[str, object] = {
+            "text": text,
+            "segments": [
+                {"start": segment.start_seconds, "end": segment.end_seconds, "text": segment.text}
+                for segment in segments
+            ],
+            "backend": "openai",
+            "model": self.config.model,
+            "language": self.config.language,
+        }
+        usage = [payload.get("usage") for payload in chunk_payloads if payload.get("usage") is not None]
+        if usage:
+            transcript_payload["usage"] = usage
+        if len(chunk_payloads) > 1:
+            transcript_payload["chunks"] = len(chunk_payloads)
+        transcript_path.write_text(json.dumps(transcript_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        return AsrTranscriptionResult(
+            segments=segments,
+            transcript_path=transcript_path,
+            status_message=f"OpenAI ASR 逐字稿可用。model={self.config.model}",
+        )
+
+    def _transcriptions_create(self, audio_path: Path) -> object:
+        with audio_path.open("rb") as audio_file:
+            kwargs: dict[str, object] = {
+                "file": audio_file,
+                "model": self.config.model,
+                "response_format": self.config.response_format,
+            }
+            if self.config.language:
+                kwargs["language"] = self.config.language
+            if self.config.prompt:
+                kwargs["prompt"] = self.config.prompt
+            return self._audio_client().audio.transcriptions.create(**kwargs)
+
+    def _audio_chunks(self, audio_path: Path, output_dir: Path) -> tuple[Path, ...]:
+        if self._client is not None:
+            return (audio_path,)
+        chunk_seconds = int(max(1.0, self.config.chunk_length_seconds))
+        chunks_dir = output_dir / "chunks" / audio_path.stem
+        chunks_dir.mkdir(parents=True, exist_ok=True)
+        for old_chunk in chunks_dir.glob("*.mp3"):
+            old_chunk.unlink()
+        command = [
+            self.config.ffmpeg_executable,
+            "-y",
+            "-i",
+            str(audio_path),
+            "-vn",
+            "-ac",
+            "1",
+            "-ar",
+            "16000",
+            "-b:a",
+            self.config.chunk_bitrate,
+            "-f",
+            "segment",
+            "-segment_time",
+            str(chunk_seconds),
+            "-reset_timestamps",
+            "1",
+            str(chunks_dir / "%05d.mp3"),
+        ]
+        try:
+            subprocess.run(command, check=True, capture_output=True, text=True)
+        except FileNotFoundError as error:
+            raise RuntimeError("找不到 ffmpeg，無法將長音訊切段後送 OpenAI ASR。") from error
+        except subprocess.CalledProcessError as error:
+            detail = (error.stderr or error.stdout or str(error)).strip()
+            raise RuntimeError(f"OpenAI ASR 前處理切段失敗：{detail}") from error
+        chunk_paths = tuple(sorted(chunks_dir.glob("*.mp3")))
+        if not chunk_paths:
+            raise RuntimeError("OpenAI ASR 前處理未產生音訊切段。")
+        return chunk_paths
+
+    def _audio_client(self) -> OpenAIAudioTranscriptionsClient:
+        if self._client is not None:
+            return self._client
+        try:
+            from openai import OpenAI
+        except ImportError as error:
+            raise RuntimeError("openai Python SDK is not installed.") from error
+        return OpenAI(api_key=self.api_key)
+
+
 def build_local_audio_research_source(
     audio_path: Path | str,
     *,
@@ -358,6 +540,69 @@ def normalize_whisper_json_encoding(transcript_path: Path) -> None:
     )
 
 
+def _openai_transcription_payload(response: object) -> dict[str, Any]:
+    if isinstance(response, dict):
+        return response
+    model_dump = getattr(response, "model_dump", None)
+    if callable(model_dump):
+        dumped = model_dump()
+        if isinstance(dumped, dict):
+            return dumped
+    payload: dict[str, Any] = {}
+    for key in ("text", "segments", "duration", "language", "usage"):
+        value = getattr(response, key, None)
+        if value is not None:
+            payload[key] = value
+    return payload
+
+
+def _openai_segments_from_payload(payload: dict[str, Any]) -> tuple[AsrTranscriptSegment, ...]:
+    return tuple(
+        AsrTranscriptSegment(
+            text=_string(segment.get("text"), ""),
+            start_seconds=_float_or_none(segment.get("start")),
+            end_seconds=_float_or_none(segment.get("end")),
+        )
+        for segment in _list(payload.get("segments"))
+        if isinstance(segment, dict) and _string(segment.get("text"), "")
+    )
+
+
+def _openai_segments_from_chunk_payloads(
+    payloads: list[dict[str, Any]],
+    chunk_length_seconds: float,
+) -> tuple[AsrTranscriptSegment, ...]:
+    segments: list[AsrTranscriptSegment] = []
+    for index, payload in enumerate(payloads):
+        offset = index * max(1.0, chunk_length_seconds)
+        chunk_segments = _openai_segments_from_payload(payload)
+        if chunk_segments:
+            segments.extend(_offset_segments(chunk_segments, offset))
+            continue
+        text = _string(payload.get("text"), "")
+        if text:
+            segments.append(AsrTranscriptSegment(text=text, start_seconds=offset))
+    return tuple(segments)
+
+
+def _offset_segments(
+    segments: tuple[AsrTranscriptSegment, ...],
+    offset_seconds: float,
+) -> tuple[AsrTranscriptSegment, ...]:
+    return tuple(
+        AsrTranscriptSegment(
+            text=segment.text,
+            start_seconds=_add_offset(segment.start_seconds, offset_seconds),
+            end_seconds=_add_offset(segment.end_seconds, offset_seconds),
+        )
+        for segment in segments
+    )
+
+
+def _add_offset(value: float | None, offset_seconds: float) -> float | None:
+    return None if value is None else value + offset_seconds
+
+
 class _OpenVINOAsrRunner:
     def __init__(self, config: OpenVINOAsrConfig) -> None:
         self.config = config
@@ -487,3 +732,12 @@ def _float_or_none(value: object) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _list(value: object) -> list[object]:
+    return value if isinstance(value, list) else []
+
+
+def _string(value: object, default: str = "未判定") -> str:
+    text = str(value).strip() if value is not None else ""
+    return text or default
