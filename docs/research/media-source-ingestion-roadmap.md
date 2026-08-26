@@ -15,7 +15,7 @@
    - 純核心測試使用 fake/mock；真實 YouTube 驗收放 integration，不混入一般單元測試。
 
 2. **YouTube 會員影片 / 受限制影片**
-   - 參考舊 Selenium crawler：`C:\Github\Python Selenium Crawler\seleniumScreenShot-fullPageAndYoutubeAndm3u8.py`。
+   - 可參考既有 Selenium crawler 或瀏覽器自動化原型，但公開文件不依賴作者本機路徑。
    - 不再把流程設計成反覆手動更新 cookie 或長期保存 m3u8。
    - 使用專用 Chrome profile 或既有瀏覽器 session，進頁面後即時嗅探 m3u8 / media request。
    - 嗅探到短效 m3u8 後立刻交給 yt-dlp / ffmpeg 下載，不把短效 URL 當長期資料保存。

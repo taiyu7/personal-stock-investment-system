@@ -183,7 +183,7 @@ AI clients 只保存各模型平台的使用約定、提示詞模板與安全邊
 
 ### Obsidian
 
-Obsidian 保存長期知識、研究框架、決策理由與學習紀錄。GitHub Issues 保存可執行任務；主 Repo 保存程式事實；AI Context 保存跨 Session 交接狀態。
+Obsidian 保存長期知識、研究框架、決策理由與學習紀錄。GitHub Issues 保存可執行任務；主 Repo 保存程式事實；專案交接摘要保存跨工作階段的開發脈絡。
 
 ## 開發原則
 

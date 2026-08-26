@@ -47,7 +47,7 @@ AutoDashboard/
 進入專案資料夾：
 
 ```powershell
-cd C:\Users\taiyu\OneDrive\桌面\stock\AutoDashboard
+cd <legacy-autodashboard-root>
 ```
 
 安裝需要的套件：

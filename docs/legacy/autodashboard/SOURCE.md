@@ -2,7 +2,7 @@
 
 這個目錄保存從舊 AutoDashboard 遷移時仍有參考價值的文件。
 
-- Source repo: `C:\Users\taiyu\OneDrive\桌面\stock\AutoDashboard`
+- Source repo: legacy local AutoDashboard repository
 - Source branch: `feat/exportAsTemplate`
 - Source commit: `6e20b3b feat:不確定做完沒的每日復盤輸出`
 - Migrated on: 2026-08-07

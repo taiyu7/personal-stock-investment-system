@@ -204,7 +204,7 @@ Measure-Command {
 
 ```powershell
 Measure-Command {
-  whisper C:\Users\taiyu\personal-stock-investment-system\data\raw\asr-samples\sample-16k-mono.wav --model breeze-asr-25 --output_format json --output_dir C:\Users\taiyu\personal-stock-investment-system\data\processed\asr-transcripts --language Chinese
+  whisper data\raw\asr-samples\sample-16k-mono.wav --model breeze-asr-25 --output_format json --output_dir data\processed\asr-transcripts --language Chinese
 }
 ```
 
@@ -388,7 +388,7 @@ preferred backend
 
 - GitHub issue：[#43 ASR Phase A：Breeze-ASR-25 保準確度加速可行性評估](https://github.com/taiyu7/personal-stock-investment-system/issues/43)
 - 既有整合文件：[Breeze-ASR-25 安裝與整合流程](breeze-asr-25-setup.md)
-- Obsidian 方法筆記：`C:\Users\taiyu\Obsidian\個人理財資訊系統\05-knowledge\methods\ASR 硬體加速 adapter 設定.md`
+- 個人方法筆記：若有內部知識庫，可另存本機筆記；公開 repo 不依賴該路徑。
 - PyTorch 官方文件：[Getting Started on Intel GPU](https://docs.pytorch.org/docs/stable/notes/get_start_xpu.html)
 - Intel Extension for PyTorch 官方文件：[Retirement Plan](https://intel.github.io/intel-extension-for-pytorch/)
 - OpenVINO 官方文件：[Automatic speech recognition using Whisper and OpenVINO with Generate API](https://docs.openvino.ai/2024/notebooks/whisper-asr-genai-with-output.html)

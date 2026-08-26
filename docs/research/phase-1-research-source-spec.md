@@ -180,7 +180,7 @@ PDF 轉 Markdown 時應盡量保留：
 
 預設輸出兩份：
 
-- Obsidian inbox：預設寫入 `C:\Users\taiyu\Obsidian\個人理財資訊系統\00-inbox\`，作為待整理研究來源。
+- Obsidian inbox：可設定為使用者自己的 Obsidian inbox 或其他知識庫資料夾，作為待整理研究來源。
 - 自選路徑：預設為使用者桌面，後續可在 UI 或設定中改成其他資料夾。
 
 使用者可以調整輸出策略：

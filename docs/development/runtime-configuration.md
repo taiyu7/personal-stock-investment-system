@@ -174,7 +174,7 @@ $env:PYTHONPATH = "src"
 - Chrome：`C:\Program Files\Google\Chrome\Application\chrome.exe`
 - ChromeDriver：`data\local\chromedriver\chromedriver-win64\chromedriver.exe`
 - 專用 debug profile：`data\local\psis-browser-asr-debug-profile`
-- yt-dlp cookies profile：`chrome:C:\Users\taiyu\AppData\Local\psis-browser-asr-profile\Default`
+- yt-dlp cookies profile：`chrome:<browser-profile-path>`
 
 原因：
 

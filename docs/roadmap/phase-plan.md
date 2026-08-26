@@ -25,12 +25,12 @@
 
 ## Phase 1.5：知識庫與開發環境隔離
 
-- [x] 確認沿用既有 Obsidian vault：`C:\Users\taiyu\Obsidian\個人理財資訊系統`
+- [x] 確認沿用個人 Obsidian vault，實際路徑由本機設定或使用者輸出設定管理，不寫入公開文件。
 - [x] 建立 Obsidian 基本目錄與系統索引
 - [x] 定義 Obsidian 與 GitHub Issues 的分工
-- [x] 將本機 GitHub 帳號切換與 remote 維運方式記錄到 Obsidian
+- [x] 將 GitHub remote 維運與開發環境注意事項記錄到內部知識庫
 - [ ] 整理目前 Obsidian vault 架構，確認索引、系統設計、研究筆記、決策紀錄與 issue 拆解的分工
-- [ ] 將必要的 AI context 摘要同步到既有 Obsidian vault
+- [ ] 將必要的專案交接摘要同步到內部知識庫
 - [x] 建立 Dockerfile、docker-compose.yml 與 .dockerignore
 - [x] 確認 `docker compose run --rm app pytest` 可通過
 - [x] 確認 `docker compose up dashboard` 可啟動 Streamlit Dashboard

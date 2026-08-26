@@ -26,7 +26,7 @@ Breeze-ASR-25 官方 README 說明此模型基於 Whisper-large-v2 微調，針�
 以下命令都在主 Repo 執行：
 
 ```powershell
-cd C:\Users\taiyu\personal-stock-investment-system
+cd <repo-root>
 ```
 
 ### 1. 建立外部工具目錄
@@ -141,7 +141,7 @@ python -m pip install git+https://github.com/Splend1d/whisper-patch-breeze.git@f
 執行：
 
 ```powershell
-whisper C:\Users\taiyu\personal-stock-investment-system\data\raw\asr-samples\sample.wav --model breeze-asr-25 --output_format json --output_dir C:\Users\taiyu\personal-stock-investment-system\data\processed\asr-transcripts --language Chinese
+whisper data\raw\asr-samples\sample.wav --model breeze-asr-25 --output_format json --output_dir data\processed\asr-transcripts --language Chinese
 ```
 
 ## 整合位置
