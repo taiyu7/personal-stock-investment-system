@@ -14,6 +14,8 @@ from personal_stock_investment_system.research.sources import ResearchSource, Re
 
 DEFAULT_BREEZE_ASR_MODEL = "breeze-asr-25"
 DEFAULT_OPENAI_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe"
+DEFAULT_OPENAI_CHUNK_LENGTH_SECONDS = 180.0
+DEFAULT_OPENAI_OUTPUT_TOKEN_WARNING_THRESHOLD = 2048
 
 
 @dataclass(frozen=True)
@@ -40,6 +42,7 @@ class AsrTranscriptionResult:
     status: SourceImportStatus = "available"
     status_message: str = "ASR 逐字稿可用。"
     error: str = ""
+    warnings: tuple[str, ...] = ()
 
 
 class SpeechToTextClient(Protocol):
@@ -221,9 +224,10 @@ class OpenAIAsrConfig:
     language: str = "zh"
     prompt: str = ""
     response_format: str = "json"
-    chunk_length_seconds: float = 600.0
+    chunk_length_seconds: float = DEFAULT_OPENAI_CHUNK_LENGTH_SECONDS
     chunk_bitrate: str = "32k"
     ffmpeg_executable: str = "ffmpeg"
+    output_token_warning_threshold: int = DEFAULT_OPENAI_OUTPUT_TOKEN_WARNING_THRESHOLD
 
 
 class OpenAIAudioTranscriptionsClient(Protocol):
@@ -248,16 +252,37 @@ class OpenAIAsrTranscriber:
         client: OpenAIAudioTranscriptionsClient | None = None,
     ) -> None:
         env_model = os.getenv("OPENAI_AUDIO_TRANSCRIPTION_MODEL", "")
-        resolved_config = config or OpenAIAsrConfig(model=env_model or DEFAULT_OPENAI_TRANSCRIPTION_MODEL)
+        env_prompt = os.getenv("OPENAI_AUDIO_TRANSCRIPTION_PROMPT", "")
+        env_chunk_seconds = _float_env(
+            "OPENAI_AUDIO_CHUNK_LENGTH_SECONDS",
+            DEFAULT_OPENAI_CHUNK_LENGTH_SECONDS,
+        )
+        env_warning_threshold = _int_env(
+            "OPENAI_AUDIO_OUTPUT_TOKEN_WARNING_THRESHOLD",
+            DEFAULT_OPENAI_OUTPUT_TOKEN_WARNING_THRESHOLD,
+        )
+        resolved_config = config or OpenAIAsrConfig(
+            model=env_model or DEFAULT_OPENAI_TRANSCRIPTION_MODEL,
+            prompt=env_prompt,
+            chunk_length_seconds=env_chunk_seconds,
+            output_token_warning_threshold=env_warning_threshold,
+        )
         self.config = OpenAIAsrConfig(
-            model=resolved_config.model or env_model or DEFAULT_OPENAI_TRANSCRIPTION_MODEL,
+            model=_openai_model_value(resolved_config.model, env_model),
             output_dir=resolved_config.output_dir,
             language=resolved_config.language,
-            prompt=resolved_config.prompt,
+            prompt=resolved_config.prompt or env_prompt,
             response_format=resolved_config.response_format,
-            chunk_length_seconds=resolved_config.chunk_length_seconds,
+            chunk_length_seconds=_float_env_value(
+                "OPENAI_AUDIO_CHUNK_LENGTH_SECONDS",
+                resolved_config.chunk_length_seconds,
+            ),
             chunk_bitrate=resolved_config.chunk_bitrate,
             ffmpeg_executable=resolved_config.ffmpeg_executable,
+            output_token_warning_threshold=_int_env_value(
+                "OPENAI_AUDIO_OUTPUT_TOKEN_WARNING_THRESHOLD",
+                resolved_config.output_token_warning_threshold,
+            ),
         )
         self.api_key = api_key if api_key is not None else os.getenv("OPENAI_API_KEY", "")
         self._client = client
@@ -318,17 +343,25 @@ class OpenAIAsrTranscriber:
             "backend": "openai",
             "model": self.config.model,
             "language": self.config.language,
+            "chunk_length_seconds": self.config.chunk_length_seconds,
         }
         usage = [payload.get("usage") for payload in chunk_payloads if payload.get("usage") is not None]
         if usage:
             transcript_payload["usage"] = usage
+        warnings = _openai_usage_warnings(chunk_payloads, self.config.output_token_warning_threshold)
+        if warnings:
+            transcript_payload["warnings"] = list(warnings)
         if len(chunk_payloads) > 1:
             transcript_payload["chunks"] = len(chunk_payloads)
         transcript_path.write_text(json.dumps(transcript_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        status_message = f"OpenAI ASR 逐字稿可用。model={self.config.model}"
+        if warnings:
+            status_message += f"；警示={len(warnings)}"
         return AsrTranscriptionResult(
             segments=segments,
             transcript_path=transcript_path,
-            status_message=f"OpenAI ASR 逐字稿可用。model={self.config.model}",
+            status_message=status_message,
+            warnings=warnings,
         )
 
     def _transcriptions_create(self, audio_path: Path) -> object:
@@ -720,6 +753,8 @@ def _transcript_json_markdown_text(transcript_path: Path, transcription: AsrTran
 def _notes(notes: str, transcription: AsrTranscriptionResult) -> str:
     parts = [notes.strip()] if notes.strip() else []
     parts.append(f"asr_status={transcription.status}")
+    for warning in transcription.warnings:
+        parts.append(f"asr_warning={warning}")
     if transcription.error:
         parts.append(f"asr_error={transcription.error}")
     return "\n".join(parts)
@@ -741,3 +776,78 @@ def _list(value: object) -> list[object]:
 def _string(value: object, default: str = "未判定") -> str:
     text = str(value).strip() if value is not None else ""
     return text or default
+
+
+def _float_env(name: str, default: float) -> float:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+def _float_env_value(name: str, fallback: float) -> float:
+    if os.getenv(name, "").strip():
+        return _float_env(name, fallback)
+    return fallback
+
+
+def _int_env(name: str, default: int) -> int:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+def _int_env_value(name: str, fallback: int) -> int:
+    if os.getenv(name, "").strip():
+        return _int_env(name, fallback)
+    return fallback
+
+
+def _openai_model_value(config_model: str, env_model: str) -> str:
+    if config_model and config_model != DEFAULT_OPENAI_TRANSCRIPTION_MODEL:
+        return config_model
+    return env_model or config_model or DEFAULT_OPENAI_TRANSCRIPTION_MODEL
+
+
+def _openai_usage_warnings(
+    chunk_payloads: list[dict[str, Any]],
+    threshold: int,
+) -> tuple[str, ...]:
+    if threshold <= 0:
+        return ()
+    warnings: list[str] = []
+    for index, payload in enumerate(chunk_payloads):
+        output_tokens = _usage_output_tokens(payload.get("usage"))
+        if output_tokens is not None and output_tokens >= threshold:
+            warnings.append(
+                f"chunk {index} output_tokens={output_tokens} reached warning threshold {threshold}; transcript may be truncated"
+            )
+    return tuple(warnings)
+
+
+def _usage_output_tokens(usage: object) -> int | None:
+    if isinstance(usage, dict):
+        value = usage.get("output_tokens")
+        if value is None and isinstance(usage.get("output_tokens_details"), dict):
+            value = usage["output_tokens_details"].get("total_tokens")
+        return _int_or_none(value)
+    value = getattr(usage, "output_tokens", None)
+    return _int_or_none(value)
+
+
+def _int_or_none(value: object) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None

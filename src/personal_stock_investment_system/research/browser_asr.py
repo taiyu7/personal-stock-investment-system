@@ -53,6 +53,8 @@ class BrowserSessionAsrInput:
     openvino_model_dir: Path | None = None
     openvino_device: str = "GPU"
     openai_transcription_model: str = ""
+    openai_transcription_prompt: str = ""
+    openai_chunk_length_seconds: float = 180.0
     language: str = "zh"
     task: str = "transcribe"
     ytdlp_cookies_from_browser: str = ""
@@ -138,6 +140,8 @@ def main(argv: list[str] | None = None) -> int:
             openvino_model_dir=args.openvino_model_dir,
             openvino_device=args.openvino_device,
             openai_transcription_model=args.openai_transcription_model,
+            openai_transcription_prompt=args.openai_transcription_prompt,
+            openai_chunk_length_seconds=args.openai_chunk_length_seconds,
             language=args.language,
             task=args.task,
             ytdlp_cookies_from_browser=args.yt_dlp_cookies_from_browser,
@@ -207,6 +211,8 @@ def _default_transcriber(source_input: BrowserSessionAsrInput) -> SpeechToTextCl
                 model=source_input.openai_transcription_model,
                 output_dir=_transcript_output_dir(source_input, "openai"),
                 language=source_input.language,
+                prompt=source_input.openai_transcription_prompt,
+                chunk_length_seconds=source_input.openai_chunk_length_seconds,
             )
         )
     if provider == "openvino" and source_input.openvino_model_dir is not None:
@@ -252,6 +258,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--openvino-model-dir", type=Path, default=None)
     parser.add_argument("--openvino-device", default="GPU")
     parser.add_argument("--openai-transcription-model", default="")
+    parser.add_argument("--openai-transcription-prompt", default="")
+    parser.add_argument("--openai-chunk-length-seconds", type=float, default=180.0)
     parser.add_argument("--language", default="zh")
     parser.add_argument("--task", default="transcribe")
     parser.add_argument("--yt-dlp-cookies-from-browser", default="")
@@ -273,6 +281,8 @@ def _format_cli_result(result: BrowserSessionAsrResult) -> str:
     if result.transcription is not None:
         lines.append(f"asr_status={result.transcription.status}")
         lines.append(f"transcript_path={result.transcription.transcript_path or ''}")
+        for warning in result.transcription.warnings:
+            lines.append(f"asr_warning={warning}")
         if result.transcription.error:
             lines.append(f"asr_error={result.transcription.error}")
     if result.source_import_result is not None:

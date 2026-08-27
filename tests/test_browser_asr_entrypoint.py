@@ -126,3 +126,30 @@ def test_browser_session_asr_cli_result_includes_transcription_error(tmp_path):
 
     assert "asr_status=transcript_unavailable" in output
     assert "asr_error=input_too_large" in output
+
+
+def test_browser_session_asr_cli_result_includes_transcription_warnings(tmp_path):
+    class WarningSpeechToText:
+        def transcribe(self, audio_path: Path) -> AsrTranscriptionResult:
+            return AsrTranscriptionResult(
+                segments=(AsrTranscriptSegment("投顧提到 2330", 1.0, 3.0),),
+                transcript_path=audio_path.parent / "sample.json",
+                warnings=("chunk 0 output_tokens=2048 reached warning threshold 2048; transcript may be truncated",),
+            )
+
+    result = run_browser_session_asr_pipeline(
+        BrowserSessionAsrInput(
+            page_url="https://example.test/member-video",
+            output_stem="episode-1",
+            raw_output_dir=tmp_path / "raw",
+            wav_output_dir=tmp_path / "wav",
+        ),
+        discovery=FakeDiscovery(),
+        downloader=FakeDownloader(),
+        preprocessor=FakePreprocessor(),
+        speech_to_text=WarningSpeechToText(),
+    )
+
+    output = _format_cli_result(result)
+
+    assert "asr_warning=chunk 0 output_tokens=2048" in output

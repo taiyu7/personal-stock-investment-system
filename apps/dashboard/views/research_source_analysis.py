@@ -8,6 +8,7 @@ import streamlit as st
 from personal_stock_investment_system.research import (
     BrowserSessionAsrInput,
     BrowserSessionAsrResult,
+    DEFAULT_OPENAI_CHUNK_LENGTH_SECONDS,
     DEFAULT_OBSIDIAN_INBOX_PATH,
     DEFAULT_OPENAI_TRANSCRIPTION_MODEL,
     PhaseOneResearchInput,
@@ -30,6 +31,11 @@ ANALYSIS_PROVIDER_OPTIONS = {
     "本機規則 fallback": "rule_based_fallback",
     "OpenAI": "openai",
     "Claude（尚未接 API）": "anthropic_claude",
+}
+
+REPORT_STYLE_OPTIONS = {
+    "固定研究報告（可做多來源統計）": "structured_report",
+    "投資情報摘要（含主流股基期防守表）": "investment_brief",
 }
 
 TRANSCRIPTION_PROVIDER_OPTIONS = {
@@ -66,6 +72,10 @@ def get_default_browser_asr_settings() -> dict[str, str | float]:
     return WINDOWS_BROWSER_ASR_SETTINGS if os.name == "nt" else DEFAULT_BROWSER_ASR_SETTINGS
 
 
+def _option_value(options: dict[str, str], label: str | None, default_label: str) -> str:
+    return options.get(label or default_label, options[default_label])
+
+
 def build_browser_asr_input(
     *,
     page_url: str,
@@ -84,6 +94,8 @@ def build_browser_asr_input(
     openvino_model_dir: str,
     openvino_device: str,
     openai_transcription_model: str,
+    openai_transcription_prompt: str,
+    openai_chunk_length_seconds: float,
     language: str,
 ) -> BrowserSessionAsrInput:
     return BrowserSessionAsrInput(
@@ -103,6 +115,8 @@ def build_browser_asr_input(
         openvino_model_dir=Path(openvino_model_dir) if openvino_model_dir.strip() else None,
         openvino_device=openvino_device.strip() or "GPU",
         openai_transcription_model=openai_transcription_model.strip(),
+        openai_transcription_prompt=openai_transcription_prompt.strip(),
+        openai_chunk_length_seconds=openai_chunk_length_seconds,
         language=language.strip() or "zh",
     )
 
@@ -129,6 +143,8 @@ def _render_browser_asr_status(result: BrowserSessionAsrResult) -> None:
             st.warning(result.transcription.status_message or "逐字稿尚未產生。")
         if result.transcription.transcript_path is not None:
             st.code(str(result.transcription.transcript_path), language=None)
+        for warning in result.transcription.warnings:
+            st.warning(warning)
         if result.transcription.error:
             st.error(result.transcription.error)
 
@@ -153,8 +169,15 @@ def render_research_source_analysis_page() -> None:
             "轉錄 provider",
             tuple(TRANSCRIPTION_PROVIDER_OPTIONS),
             default="OpenAI",
+            help="OpenAI 適合直接產生逐字稿；OpenVINO 適合本機模型；只產生 WAV 則先不做 ASR。",
         )
-        transcription_provider = TRANSCRIPTION_PROVIDER_OPTIONS[transcription_label]
+        transcription_provider = _option_value(TRANSCRIPTION_PROVIDER_OPTIONS, transcription_label, "OpenAI")
+        if transcription_provider == "openai":
+            st.info(
+                "OpenAI 轉錄會先把長音檔依 chunk 秒數切段。chunk 越短通常越能降低長段漏字或截斷風險，但 API 呼叫次數會增加。"
+            )
+        elif transcription_provider == "openvino":
+            st.info("OpenVINO 走本機模型，不會使用 OpenAI transcription prompt。")
         output_stem = st.text_input("輸出檔名前綴", value="manual-verify-dashboard-asr")
         browser_title = st.text_input("逐字稿標題", value="")
 
@@ -200,7 +223,30 @@ def render_research_source_analysis_page() -> None:
             openai_transcription_model = st.text_input(
                 "OpenAI transcription model",
                 value=os.getenv("OPENAI_AUDIO_TRANSCRIPTION_MODEL", DEFAULT_OPENAI_TRANSCRIPTION_MODEL),
+                help="可手動切換 OpenAI ASR 模型；預設使用成本較低的 gpt-4o-mini-transcribe。",
             )
+            openai_chunk_length_seconds = st.number_input(
+                "OpenAI chunk 秒數",
+                min_value=30.0,
+                max_value=900.0,
+                value=float(os.getenv("OPENAI_AUDIO_CHUNK_LENGTH_SECONDS", DEFAULT_OPENAI_CHUNK_LENGTH_SECONDS)),
+                step=30.0,
+                help="可手動調整。建議先用 180 秒；若逐字稿仍漏很多股票，可試 120 秒。",
+            )
+            if openai_chunk_length_seconds <= 180:
+                st.info("目前 chunk 設定偏保守，適合台股影片這種專有名詞密集的內容。")
+            else:
+                st.warning("chunk 超過 180 秒時，長段內容較容易漏掉細節；若發現股票缺漏，先改回 120 或 180 秒。")
+            openai_transcription_prompt = st.text_area(
+                "OpenAI transcription prompt",
+                value=os.getenv("OPENAI_AUDIO_TRANSCRIPTION_PROMPT", ""),
+                height=90,
+                help="這裡只提示 ASR 可能出現的詞彙，讓逐字稿更準；股票代碼查核會由 #58 的腳本處理。",
+            )
+            if openai_transcription_prompt.strip():
+                st.info("這段 prompt 會送進 OpenAI transcription API，用來降低台股專有詞誤聽。它不會驗證股票代碼。")
+            else:
+                st.warning("目前沒有 ASR prompt；#59 詞彙表完成前，可先手動貼常見公司名、代碼與產業詞。")
             openvino_model_dir = st.text_input(
                 "OpenVINO model dir",
                 value=str(browser_asr_settings["openvino_model_dir"]),
@@ -236,6 +282,8 @@ def render_research_source_analysis_page() -> None:
                         openvino_model_dir=openvino_model_dir,
                         openvino_device=openvino_device,
                         openai_transcription_model=openai_transcription_model,
+                        openai_transcription_prompt=openai_transcription_prompt,
+                        openai_chunk_length_seconds=float(openai_chunk_length_seconds),
                         language=language,
                     )
                 )
@@ -255,7 +303,7 @@ def render_research_source_analysis_page() -> None:
     st.markdown("### 2. 產生研究報告")
     default_input_label = _selected_input_label_from_transcript(st.session_state["research_asr_transcript_json_path"])
     input_label = st.segmented_control("來源類型", tuple(INPUT_KIND_OPTIONS), default=default_input_label)
-    input_kind = INPUT_KIND_OPTIONS[input_label]
+    input_kind = _option_value(INPUT_KIND_OPTIONS, input_label, default_input_label)
 
     title = st.text_input("標題", value="")
     publisher = st.text_input("發布者／頻道／機構", value="")
@@ -286,12 +334,23 @@ def render_research_source_analysis_page() -> None:
         source_url = st.text_input("來源 URL", value="")
 
     st.markdown("### 彙整方式")
+    report_style_label = st.segmented_control(
+        "報告類型",
+        tuple(REPORT_STYLE_OPTIONS),
+        default="固定研究報告（可做多來源統計）",
+        help="固定研究報告給多來源統計；投資情報摘要給單支影片閱讀，不混用。",
+    )
+    report_style = _option_value(REPORT_STYLE_OPTIONS, report_style_label, "固定研究報告（可做多來源統計）")
+    if report_style == "structured_report":
+        st.info("固定研究報告會保留結構化欄位，方便之後做來源次數、族群熱度與講者態度統計。")
+    else:
+        st.info("投資情報摘要可以包含主流股基期防守表，但不應拿來直接做多來源次數統計。")
     analysis_label = st.segmented_control(
         "研究彙整 provider",
         tuple(ANALYSIS_PROVIDER_OPTIONS),
         default="本機規則 fallback",
     )
-    analysis_provider = ANALYSIS_PROVIDER_OPTIONS[analysis_label]
+    analysis_provider = _option_value(ANALYSIS_PROVIDER_OPTIONS, analysis_label, "本機規則 fallback")
     default_model = "rule_based_v1"
     if analysis_provider == "openai":
         default_model = os.getenv("OPENAI_RESEARCH_ANALYSIS_MODEL", "gpt-4.1-mini")
@@ -300,6 +359,8 @@ def render_research_source_analysis_page() -> None:
     analysis_model = st.text_input("模型／版本", value=default_model)
     if analysis_provider == "openai" and not os.getenv("OPENAI_API_KEY"):
         st.warning("尚未設定 OPENAI_API_KEY；本次會改用本機規則 fallback。")
+    if report_style == "investment_brief" and analysis_provider != "openai":
+        st.warning("投資情報摘要目前只由 OpenAI provider 產生；其他 provider 會回到固定研究報告。")
     if analysis_provider == "anthropic_claude":
         st.warning("Claude provider 還沒有接上真實 API；本次會明確標示未支援並改用本機規則 fallback。")
 
@@ -335,6 +396,7 @@ def render_research_source_analysis_page() -> None:
                 analysis_settings=ResearchAnalysisSettings(
                     provider=analysis_provider,  # type: ignore[arg-type]
                     model=analysis_model,
+                    report_style=report_style,  # type: ignore[arg-type]
                 ),
             )
         except Exception as error:  # noqa: BLE001 - Streamlit page should show recoverable user input errors.

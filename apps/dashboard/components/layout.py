@@ -70,15 +70,23 @@ def render_page_header(app_version: str, last_updated: str) -> None:
         )
 
 
+def select_sidebar_page(page: str) -> None:
+    st.session_state.current_page = page if page in SIDEBAR_PAGES else SIDEBAR_PAGES[0]
+
+
 def render_sidebar(current_page: str) -> str:
-    selected_page = current_page
+    selected_page = st.session_state.get("current_page", current_page)
+    if selected_page not in SIDEBAR_PAGES:
+        selected_page = SIDEBAR_PAGES[0]
+        st.session_state.current_page = selected_page
     with st.sidebar:
         for index, page in enumerate(SIDEBAR_PAGES):
-            if st.button(
+            st.button(
                 page,
                 key=f"sidebar_page_{index}",
-                type="primary" if page == current_page else "secondary",
+                type="primary" if page == selected_page else "secondary",
                 width="stretch",
-            ):
-                selected_page = page
-    return selected_page
+                on_click=select_sidebar_page,
+                args=(page,),
+            )
+    return st.session_state.get("current_page", selected_page)

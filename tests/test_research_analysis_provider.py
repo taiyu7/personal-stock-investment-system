@@ -67,6 +67,62 @@ def test_openai_provider_returns_structured_report_from_fake_response():
     assert result.report.summary == "台積電受惠 AI 伺服器需求，研究員 A 看法偏多。"
     assert result.report.stock_opinions[0].stock == "2330"
     assert result.report.stock_opinions[0].reference.display_locator() == "00:00:10"
+    assert result.markdown == ""
+    assert client._client is not None
+    assert client._client.responses.kwargs["text"]["format"]["name"] == "stock_research_analysis"
+    prompt_text = str(client._client.responses.kwargs["instructions"]) + str(client._client.responses.kwargs["input"])
+    assert "每一檔 stock_opinions" in prompt_text
+    assert "必須同步建立 technical_notes" in prompt_text
+    assert "三陽開泰" in prompt_text
+    assert "仙人指路" in prompt_text
+    assert "不是完整固定清單" in prompt_text
+
+
+def test_openai_provider_can_return_separate_investment_brief_markdown():
+    source = ResearchSource(
+        source_type="manual_text",
+        title="逐字稿",
+        raw_text="[00:00:10] 研究員 A 認為 2330 台積電受惠 AI 伺服器需求，方向偏多。",
+    )
+    client = OpenAIResearchAnalysisClient(
+        model="gpt-test",
+        api_key="test-key",
+        client=FakeOpenAIClient(_openai_brief_payload_text()),
+        report_style="investment_brief",
+    )
+
+    result = client.analyze(source)
+
+    assert result.status == "available"
+    assert result.report.summary == "台積電受惠 AI 伺服器需求，研究員 A 看法偏多。"
+    assert "## 主流股基期防守表" in result.markdown
+    assert "| 2330 | 台積電 | AI 伺服器 | 回測月線後轉強 | 月線 |" in result.markdown
+    assert "https://www.tsmc.com/" in result.markdown
+    assert client._client is not None
+    assert client._client.responses.kwargs["tools"] == [{"type": "web_search_preview", "search_context_size": "medium"}]
+    assert client._client.responses.kwargs["text"]["format"]["name"] == "stock_investment_brief"
+
+
+def test_openai_provider_can_disable_web_search():
+    source = ResearchSource(
+        source_type="manual_text",
+        title="逐字稿",
+        raw_text="[00:00:10] 研究員 A 認為 2330 台積電受惠 AI 伺服器需求，方向偏多。",
+    )
+    fake_client = FakeOpenAIClient(_openai_payload_text())
+    client = OpenAIResearchAnalysisClient(
+        model="gpt-test",
+        api_key="test-key",
+        client=fake_client,
+        enable_web_search=False,
+    )
+
+    result = client.analyze(source)
+
+    assert result.status == "available"
+    assert "tools" not in fake_client.responses.kwargs
+    assert "不可查網路" in str(fake_client.responses.kwargs["input"])
+    assert "待查證" in str(fake_client.responses.kwargs["input"])
 
 
 def test_openai_provider_falls_back_without_api_key(monkeypatch):
@@ -230,5 +286,53 @@ def _openai_payload_text() -> str:
   "hypotheses": [],
   "risks_and_counterexamples": ["未判定"],
   "open_questions": ["台積電 AI 伺服器相關營收占比需要查證。"],
+  "next_actions": ["查證公司營收與 AI 伺服器需求數據。"]
+}"""
+
+
+def _openai_brief_payload_text() -> str:
+    return """{
+  "summary": "台積電受惠 AI 伺服器需求，研究員 A 看法偏多。",
+  "stock_notes": [
+    {
+      "stock": "2330",
+      "company": "台積電",
+      "group": "AI 伺服器",
+      "trend": "偏多",
+      "reason": "逐字稿明確提到 AI 伺服器需求",
+      "reference": {
+        "locator_type": "timestamp",
+        "locator": "00:00:10",
+        "quote": "研究員 A 認為 2330 台積電受惠 AI 伺服器需求，方向偏多。",
+        "confidence": "中"
+      },
+      "confidence": "中"
+    }
+  ],
+  "defense_notes": [
+    {
+      "stock": "2330",
+      "company": "台積電",
+      "group": "AI 伺服器",
+      "base_position": "回測月線後轉強",
+      "support_or_entry": "月線",
+      "action_note": "影片提到可觀察月線支撐",
+      "needs_verification": "是",
+      "reference": {
+        "locator_type": "timestamp",
+        "locator": "00:00:10",
+        "quote": "研究員 A 認為 2330 台積電受惠 AI 伺服器需求，方向偏多。",
+        "confidence": "中"
+      }
+    }
+  ],
+  "verification_sources": [
+    {
+      "title": "台積電官方網站",
+      "url": "https://www.tsmc.com/",
+      "used_for": "查證公司名稱"
+    }
+  ],
+  "risks": ["未判定"],
   "next_actions": ["查證公司營收與 AI 伺服器需求數據。"]
 }"""

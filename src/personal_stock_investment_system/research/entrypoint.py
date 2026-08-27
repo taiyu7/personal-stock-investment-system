@@ -90,7 +90,7 @@ def run_phase_one_research_source_analysis(
     )
     report = analysis_result.report
     statuses.append(analysis_result.status_message)
-    markdown = render_research_report(report)
+    markdown = analysis_result.markdown or render_research_report(report)
     written_outputs = write_research_report_outputs(
         report,
         settings=output_settings or ResearchReportOutputSettings.no_local_files(),
