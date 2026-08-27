@@ -45,6 +45,9 @@ class FakeSegmentOpenVINORunner:
 
 
 class FakeOpenAITranscriptionResponse:
+    def __init__(self, usage: dict[str, object] | None = None) -> None:
+        self.usage = usage or {"type": "tokens", "total_tokens": 123}
+
     def model_dump(self):
         return {
             "text": "研究員提到 2330 台積電與 2303 聯電。",
@@ -52,27 +55,28 @@ class FakeOpenAITranscriptionResponse:
                 {"start": 0.0, "end": 3.5, "text": "研究員提到 2330 台積電。"},
                 {"start": 3.5, "end": 6.0, "text": "也提到 2303 聯電。"},
             ],
-            "usage": {"type": "tokens", "total_tokens": 123},
+            "usage": self.usage,
         }
 
 
 class FakeOpenAITranscriptions:
-    def __init__(self) -> None:
+    def __init__(self, usage: dict[str, object] | None = None) -> None:
         self.kwargs = {}
+        self.usage = usage
 
     def create(self, **kwargs: object) -> FakeOpenAITranscriptionResponse:
         self.kwargs = kwargs
-        return FakeOpenAITranscriptionResponse()
+        return FakeOpenAITranscriptionResponse(self.usage)
 
 
 class FakeOpenAIAudio:
-    def __init__(self) -> None:
-        self.transcriptions = FakeOpenAITranscriptions()
+    def __init__(self, usage: dict[str, object] | None = None) -> None:
+        self.transcriptions = FakeOpenAITranscriptions(usage)
 
 
 class FakeOpenAIClient:
-    def __init__(self) -> None:
-        self.audio = FakeOpenAIAudio()
+    def __init__(self, usage: dict[str, object] | None = None) -> None:
+        self.audio = FakeOpenAIAudio(usage)
 
 
 def test_build_local_audio_research_source_from_asr_segments(tmp_path):
@@ -204,10 +208,60 @@ def test_openai_asr_transcriber_writes_transcript_json_from_fake_response(tmp_pa
     transcript_text = result.transcript_path.read_text(encoding="utf-8")
     assert '"backend": "openai"' in transcript_text
     assert '"model": "gpt-test-transcribe"' in transcript_text
+    assert '"chunk_length_seconds": 180.0' in transcript_text
     assert '"total_tokens": 123' in transcript_text
     assert fake_client.audio.transcriptions.kwargs["model"] == "gpt-test-transcribe"
     assert fake_client.audio.transcriptions.kwargs["language"] == "zh"
     assert fake_client.audio.transcriptions.kwargs["response_format"] == "json"
+
+
+def test_openai_asr_transcriber_reads_env_quality_settings(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENAI_AUDIO_TRANSCRIPTION_MODEL", "gpt-env-transcribe")
+    monkeypatch.setenv("OPENAI_AUDIO_TRANSCRIPTION_PROMPT", "台股詞彙：台積電、CPO、瀚荃。")
+    monkeypatch.setenv("OPENAI_AUDIO_CHUNK_LENGTH_SECONDS", "120")
+    audio_path = tmp_path / "sample.wav"
+    audio_path.write_bytes(b"fake wav")
+    output_dir = tmp_path / "openai-transcripts"
+    fake_client = FakeOpenAIClient()
+
+    transcriber = OpenAIAsrTranscriber(
+        OpenAIAsrConfig(output_dir=output_dir),
+        api_key="test-key",
+        client=fake_client,
+    )
+    result = transcriber.transcribe(audio_path)
+
+    assert result.status == "available"
+    assert transcriber.config.model == "gpt-env-transcribe"
+    assert transcriber.config.prompt == "台股詞彙：台積電、CPO、瀚荃。"
+    assert transcriber.config.chunk_length_seconds == 120.0
+    assert fake_client.audio.transcriptions.kwargs["prompt"] == "台股詞彙：台積電、CPO、瀚荃。"
+
+
+def test_openai_asr_transcriber_warns_when_output_tokens_hit_threshold(tmp_path):
+    audio_path = tmp_path / "sample.wav"
+    audio_path.write_bytes(b"fake wav")
+    output_dir = tmp_path / "openai-transcripts"
+    fake_client = FakeOpenAIClient({"type": "tokens", "total_tokens": 2500, "output_tokens": 2048})
+    transcriber = OpenAIAsrTranscriber(
+        OpenAIAsrConfig(
+            model="gpt-test-transcribe",
+            output_dir=output_dir,
+            output_token_warning_threshold=2048,
+        ),
+        api_key="test-key",
+        client=fake_client,
+    )
+
+    result = transcriber.transcribe(audio_path)
+
+    assert result.warnings == (
+        "chunk 0 output_tokens=2048 reached warning threshold 2048; transcript may be truncated",
+    )
+    assert "警示=1" in result.status_message
+    transcript_text = result.transcript_path.read_text(encoding="utf-8")
+    assert '"warnings": [' in transcript_text
+    assert "output_tokens=2048" in transcript_text
 
 
 def test_openai_asr_transcriber_reports_missing_api_key(tmp_path, monkeypatch):

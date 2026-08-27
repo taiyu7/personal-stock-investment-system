@@ -10,8 +10,16 @@ from personal_stock_investment_system.research.analysis_provider import (
     analyze_research_source_with_provider,
     build_research_analysis_client,
 )
+from personal_stock_investment_system.research.brief import (
+    BriefDefenseNote,
+    BriefStockNote,
+    BriefVerificationSource,
+    InvestmentBrief,
+    render_investment_brief,
+)
 from personal_stock_investment_system.research.asr import (
     DEFAULT_BREEZE_ASR_MODEL,
+    DEFAULT_OPENAI_CHUNK_LENGTH_SECONDS,
     DEFAULT_OPENAI_TRANSCRIPTION_MODEL,
     AsrTranscriptSegment,
     AsrTranscriptionResult,
@@ -101,6 +109,10 @@ from personal_stock_investment_system.research.youtube import (
 
 __all__ = [
     "CompanyProfileNote",
+    "BriefDefenseNote",
+    "BriefStockNote",
+    "BriefVerificationSource",
+    "InvestmentBrief",
     "ResearchReport",
     "OpenAIResearchAnalysisClient",
     "ResearchAnalysisClient",
@@ -117,6 +129,7 @@ __all__ = [
     "VerifiableHypothesis",
     "PdfPageText",
     "DEFAULT_BREEZE_ASR_MODEL",
+    "DEFAULT_OPENAI_CHUNK_LENGTH_SECONDS",
     "DEFAULT_OPENAI_TRANSCRIPTION_MODEL",
     "AsrTranscriptSegment",
     "AsrTranscriptionResult",
@@ -171,6 +184,7 @@ __all__ = [
     "load_asr_transcription_result",
     "pdf_to_markdown",
     "render_research_report",
+    "render_investment_brief",
     "resolve_research_report_output_destinations",
     "run_browser_session_asr_pipeline",
     "run_phase_one_research_source_analysis",
