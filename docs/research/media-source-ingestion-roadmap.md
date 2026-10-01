@@ -64,6 +64,35 @@ psis-capture-screenshot data/raw/videos/sample.mp4 `
 也可以重複傳入 `--timestamp` 擷取多張畫面。預設輸出到
 `data/processed/screenshots/`；該資料夾只存本機 artifact，不應提交 Git。
 
+### #67 VLM 技術分析圖面理解
+
+> 狀態：已完成程式與 fake 自動測試（完整 Docker tests 119 passed），但因目前沒有真實 K 線截圖，尚未進行真實 OpenAI VLM 或人工品質驗收，也尚未合併。
+
+`research/vlm.py` 提供 provider-neutral 的 `VisionLanguageModelClient`、結構化結果契約、
+測試專用 fake client、OpenAI adapter，以及可選本機 VLM 的介面占位。輸入只消費 #31
+成功產生且仍存在於本機的 `ScreenshotArtifact`；截圖不可用或檔案不存在時不呼叫模型。
+
+每筆結果保留 screenshot path、timestamp、`SourceReference`、provider、model、prompt/schema
+version、分析時間、狀態與錯誤。圖面 observation 分為 K 線、均線、成交量、支撐壓力、
+型態、講者指圖與其他類別，並各自保留 evidence、confidence、`needs_verification` 與
+`verification_reason`。低可讀性、無法確認是否為技術圖表或任何需查證 observation，會
+強制回傳 `needs_verification`；schema 不合、空回應、timeout 或 provider error 則回傳
+`analysis_failed`，不把不完整輸出當成結論。
+
+圖面辨識出的股票代號與公司名稱只會存成 `raw_code` / `raw_company_name` 候選，且永遠
+維持待驗證，必須再交給 #58 deterministic verifier。此流程不提供自動下單、即時投資
+建議或獲利保證，也尚未接入 #39 完整報告 renderer。
+
+OpenAI 路徑是明確 opt-in：啟用時會把截圖、timestamp、截圖理由、逐字稿 quote 與來源
+定位傳到雲端 provider，使用者應先確認素材權利、資料敏感性、供應商保存政策與 API
+費用。API key 只透過本機環境變數提供，原始模型回應不落地。一般 Docker tests 一律
+注入 fake client，不需要 API key、不連外；本機 VLM runtime 未安裝時明確回傳
+`unsupported_provider`，模型權重不放進一般 Docker image。
+
+待人工驗收條件：先由 #31 產生一張合法本機 K 線截圖，再由使用者明確 opt-in 呼叫真實
+VLM，檢查可見圖面描述、來源追溯、模糊內容待查證與 #58 驗證邊界。沒有真實截圖前，
+只能確認資料契約與錯誤處理，不能宣稱圖面判讀品質已驗收。
+
 ## Adapter 邊界
 
 未來影音來源應拆成幾個獨立 adapter：
@@ -73,6 +102,7 @@ psis-capture-screenshot data/raw/videos/sample.mp4 `
 - `audio extraction adapter`：從影片抽音訊。
 - `speech-to-text adapter`：將音訊轉成逐字稿。
 - `frame capture adapter`：依時間戳擷取影片畫面。
+- `vision-language-model adapter`：只分析合法本機 screenshot artifact；雲端與可選本機 provider 共用同一結果契約。
 - `restricted source adapter`：受限制來源的合法取得流程；待使用者提供既有機制後設計。
 - `browser session provider`：管理專用 Chrome profile 或既有瀏覽器 session，避免每次手動匯出 cookie。
 - `media discovery adapter`：打開頁面、觸發播放、從 browser performance log 即時取得 m3u8 / media request。
