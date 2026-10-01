@@ -62,7 +62,8 @@ Docker 開發環境完成後，先補強自動化測試，再開始搭建後續�
 - [ ] 設計 YouTube 會員影片 / 受限制影音來源的合法取得流程；待使用者提供既有登入或素材取得機制後再細化
 - [ ] 建立本機影片 / 音訊檔匯入與語音轉文字流程
 - [ ] 建立 podcast 音頻匯入流程，先支援本機音訊，再評估 RSS / episode URL
-- [ ] 技術分析圖面自動截圖：依時間戳擷取影片畫面，讓報告能引用圖面，不要求手工截圖
+- [ ] #31 技術分析圖面自動截圖：程式與自動測試已完成，但尚未以真實本機影片人工驗收、尚未合併
+- [ ] #67 VLM 技術圖面理解：provider-neutral schema、fake/OpenAI/local adapter 邊界與自動測試已完成；尚無真實 K 線截圖，未做真實 API 與人工品質驗收、尚未合併
 - [ ] 使用真實投顧 PDF / 簡報 PDF 進行品質驗收
 - [ ] 建立公司盡職調查工具，支援產業、商業模式、競爭力、風險與估值問題拆解
 - [ ] 建立財報分析工具，支援三大財報、關鍵比率、趨勢與異常項目檢查
@@ -81,7 +82,7 @@ Docker 開發環境完成後，先補強自動化測試，再開始搭建後續�
 
 - YouTube：Dashboard 已可透過 browser media acquisition + ASR provider 處理公開影片；但尚未實際抓取 YouTube CC 或 automatic captions。
 - Adapter 邊界：已建立通用 import status/result，可表達 `available`、`manual_fallback`、`transcript_unavailable`、`login_required`、`unsupported_source`、`media_unavailable`、`caption_language_unavailable` 與 `capture_unavailable`。
-- 影音來源：公開影片 URL -> 逐字稿 -> 報告的 MVP 已可運行；本機影片、本機音訊、podcast、會員影片穩定 UI 流程與技術分析圖面截圖尚未完成；完整規劃見 `docs/research/media-source-ingestion-roadmap.md`。
+- 影音來源：公開影片 URL -> 逐字稿 -> 報告的 MVP 已可運行；#31 截圖與 #67 VLM 圖面理解已有程式及 fake 自動測試，但都尚未人工驗收或合併，本機影片、本機音訊、podcast 與會員影片穩定 UI 流程仍未完成；完整規劃見 `docs/research/media-source-ingestion-roadmap.md`。
 - 會員影片：本機 CLI 可使用 Windows Chrome profile / cookie 與 yt-dlp remote components；Docker Dashboard 目前使用乾淨 headless Chromium，若來源需要登入，仍需後續設計 profile 掛載或合法素材提供流程。
 - PDF：文字型 PDF 已有 builtin fallback；進階 PDF 可用 `pdf-tools` profile 的 PyMuPDF4LLM backend，但仍需真實投顧 PDF / 簡報 PDF 品質驗收。
 - 分析器：本機 rule-based 與 OpenAI provider 已可用；Claude provider 尚未接真實 API。不確定內容仍應標記 `未判定` 或 `待查證`。
