@@ -140,6 +140,12 @@ from personal_stock_investment_system.research.vlm import (
     analyze_screenshot_capture,
     build_vlm_client,
 )
+from personal_stock_investment_system.research.video_report import (
+    VideoResearchReportInput,
+    VideoResearchReportResult,
+    render_video_research_report,
+    run_video_research_report_pipeline,
+)
 from personal_stock_investment_system.research.youtube import (
     YouTubeImportResult,
     YouTubeTranscriptSegment,
@@ -185,6 +191,8 @@ __all__ = [
     "VisionLanguageModelClient",
     "VlmChartAnalysisResult",
     "VlmChartAnalysisSettings",
+    "VideoResearchReportInput",
+    "VideoResearchReportResult",
     "TWSE_LISTED_COMPANIES_URL",
     "TWSE_OTC_COMPANIES_URL",
     "StockMentionVerification",
@@ -258,10 +266,12 @@ __all__ = [
     "load_asr_transcription_result",
     "pdf_to_markdown",
     "render_research_report",
+    "render_video_research_report",
     "render_investment_brief",
     "resolve_research_report_output_destinations",
     "run_browser_session_asr_pipeline",
     "run_phase_one_research_source_analysis",
+    "run_video_research_report_pipeline",
     "select_downloadable_media_request",
     "select_stream_manifest",
     "try_start_browser_media_playback",
