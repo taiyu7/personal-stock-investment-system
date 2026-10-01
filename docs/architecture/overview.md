@@ -31,11 +31,14 @@ personal_stock_investment_system 共用核心
   ├─ research/youtube.py
   ├─ research/analysis.py
   ├─ research/analysis_provider.py
+  ├─ research/stock_validation.py
   ├─ research/output.py
   ├─ research/entrypoint.py
   ├─ signals/rules.py
   ├─ reviews.py
-  └─ storage/daily_reviews.py
+  ├─ storage/daily_reviews.py
+  ├─ storage/taiwan_stocks.py
+  └─ storage/migrations.py
       │
       └─ SQLite: data/local/personal-stock-investment.db
 ```
@@ -71,11 +74,14 @@ personal_stock_investment_system 共用核心
 - `research/youtube.py`：公開 YouTube URL 解析、metadata/transcript adapter 介面與手動文字 fallback 狀態。
 - `research/analysis.py`：保守 rule-based 股票觀點分析，將來源文字整理成固定研究報告資料結構。
 - `research/analysis_provider.py`：研究彙整 provider boundary，目前支援 rule-based fallback 與 OpenAI API client；Claude 尚未接真實 API。
+- `research/stock_validation.py`：公開資訊觀測站公司主檔 adapter、股票代號／公司名稱 deterministic verifier 與同步服務。
 - `research/output.py`：研究報告輸出目的地設定與 Markdown 寫檔。
 - `research/entrypoint.py`：第一階段研究來源分析共用入口，供 Streamlit 與未來 CLI 重複使用。
 - `signals/rules.py`：偏多／中性／偏空透明規則，macro 區塊反向計分。
 - `reviews.py`：每日復盤 Markdown 與市場摘要文字。
 - `storage/daily_reviews.py`：SQLite 每日復盤 repository。
+- `storage/taiwan_stocks.py`：上市／上櫃公司主檔與同步紀錄 repository；研究報告只讀最後成功同步的本機資料。
+- `storage/migrations.py`：依 `db/migrations/` 套用版本化 SQLite schema。
 
 新增功能時，若邏輯未來可能被 Dashboard 以外的入口使用，應優先放在共用核心。
 
@@ -90,12 +96,15 @@ personal_stock_investment_system 共用核心
 
 ### 資料庫
 
-目前 SQLite 只保存個人每日復盤資料。
+目前 SQLite 保存個人每日復盤資料，以及研究報告查核使用的上市／上櫃公司主檔。
 
 - 預設路徑：`data/local/personal-stock-investment.db`。
 - `daily_reviews.trade_date` 是 primary key。
 - 儲存內容包含原始表單欄位 JSON、產生的 Markdown 與更新時間。
 - 自由文字交易紀錄目前不解析成結構化交易資料。
+- `taiwan_listed_companies.stock_code` 是公司主檔 primary key，並以 `is_active` 標記最後成功同步版本。
+- `reference_data_sync_runs` 保存同步成功／失敗、時間、筆數與錯誤；同步失敗時沿用最後成功版本。
+- Dashboard 只有在使用者按下同步按鈕時連線官方來源；產生研究報告時只讀本機 SQLite。
 
 詳細 schema 與 migration 策略請見 `db/README.md`。
 

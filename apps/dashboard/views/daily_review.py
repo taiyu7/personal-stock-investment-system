@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import os
 from datetime import date
-from pathlib import Path
 
 import streamlit as st
 
@@ -11,6 +9,7 @@ from personal_stock_investment_system.market_data.provider import YFinanceProvid
 from personal_stock_investment_system.market_data.service import MarketSummaryService
 from personal_stock_investment_system.reviews import build_daily_review_text, build_market_note
 from personal_stock_investment_system.storage.daily_reviews import DailyReview, DailyReviewRepository
+from personal_stock_investment_system.storage.database import sqlite_database_path
 
 
 FIELD_SPECS = (
@@ -30,15 +29,6 @@ FIELD_SPECS = (
 )
 
 
-def _database_path() -> Path:
-    root = Path(__file__).resolve().parents[3]
-    default = "sqlite:///data/local/personal-stock-investment.db"
-    database_url = os.getenv("DATABASE_URL", default)
-    if not database_url.startswith("sqlite:///"):
-        raise ValueError("目前 Dashboard 只支援 SQLite。請使用 sqlite:///data/local/personal-stock-investment.db")
-    return root / database_url.removeprefix("sqlite:///")
-
-
 @st.cache_data(ttl=900, show_spinner=False)
 def _market_note() -> str:
     report = MarketSummaryService(YFinanceProvider()).build(MARKET_SECTIONS)
@@ -54,7 +44,7 @@ def render_daily_review_page() -> None:
     st.subheader("每日復盤輸出")
     st.caption("儲存盤前與盤後紀錄到本機 SQLite，並保留可下載的 Markdown。")
     selected_date = st.date_input("交易日期", value=date.today()).strftime("%Y/%m/%d")
-    repository = DailyReviewRepository(_database_path())
+    repository = DailyReviewRepository(sqlite_database_path())
     actions = st.columns(3)
     with actions[0]:
         load_clicked = st.button("載入當日紀錄")

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from pathlib import Path
 from typing import Literal
@@ -17,6 +17,10 @@ from personal_stock_investment_system.research.markdown import render_research_r
 from personal_stock_investment_system.research.output import ResearchReportOutputSettings, WrittenResearchReport, write_research_report_outputs
 from personal_stock_investment_system.research.pdf import build_pdf_research_source
 from personal_stock_investment_system.research.sources import ResearchReport, ResearchSource, ResearchSourceImportResult
+from personal_stock_investment_system.research.stock_validation import (
+    TaiwanStockDirectory,
+    verify_research_report_stock_mentions,
+)
 from personal_stock_investment_system.research.asr import build_transcript_json_research_source
 from personal_stock_investment_system.research.youtube import (
     YouTubePublicClient,
@@ -75,6 +79,7 @@ def run_phase_one_research_source_analysis(
     youtube_client: YouTubePublicClient | None = None,
     analysis_settings: ResearchAnalysisSettings | None = None,
     analysis_client: ResearchAnalysisClient | None = None,
+    stock_directory: TaiwanStockDirectory | None = None,
     report_date: date | None = None,
 ) -> PhaseOneResearchResult:
     statuses: list[str] = []
@@ -90,7 +95,16 @@ def run_phase_one_research_source_analysis(
     )
     report = analysis_result.report
     statuses.append(analysis_result.status_message)
-    markdown = analysis_result.markdown or render_research_report(report)
+    report_style = (analysis_settings or ResearchAnalysisSettings()).report_style
+    if stock_directory is not None and report_style == "structured_report":
+        report = verify_research_report_stock_mentions(report, stock_directory)
+        markdown = render_research_report(report)
+        analysis_result = replace(analysis_result, report=report, markdown=markdown)
+        statuses.append(
+            f"已用官方上市／上櫃公司清單查核股票代號與公司名稱（{len(stock_directory.companies)} 筆）。"
+        )
+    else:
+        markdown = analysis_result.markdown or render_research_report(report)
     written_outputs = write_research_report_outputs(
         report,
         settings=output_settings or ResearchReportOutputSettings.no_local_files(),

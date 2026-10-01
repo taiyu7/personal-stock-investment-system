@@ -10,6 +10,7 @@ from uuid import uuid4
 SourceType = Literal["youtube_public", "pdf", "manual_text", "local_audio", "local_video"]
 LocatorType = Literal["timestamp", "page", "section", "unknown"]
 OpinionDirection = Literal["偏多", "偏空", "中性", "未判定"]
+VerificationStatus = Literal["已查證", "待查證", "疑似錯誤", "衝突", "未判定"]
 SourceImportStatus = Literal[
     "available",
     "manual_fallback",
@@ -125,6 +126,18 @@ class TechnicalAnalysisNote:
 
 
 @dataclass(frozen=True)
+class VerificationIssue:
+    item_type: str = "未判定"
+    target: str = "未判定"
+    claim: str = "未判定"
+    status: VerificationStatus = "未判定"
+    evidence: str = "未判定"
+    external_sources: tuple[str, ...] = ()
+    reference: SourceReference | None = None
+    confidence: str = "未判定"
+
+
+@dataclass(frozen=True)
 class VerifiableHypothesis:
     hypothesis: str
     required_data: str = "待查證"
@@ -141,6 +154,7 @@ class ResearchReport:
     stock_relations: tuple[StockRelation, ...] = ()
     company_profiles: tuple[CompanyProfileNote, ...] = ()
     technical_notes: tuple[TechnicalAnalysisNote, ...] = ()
+    verification_issues: tuple[VerificationIssue, ...] = ()
     hypotheses: tuple[VerifiableHypothesis, ...] = ()
     risks_and_counterexamples: tuple[str, ...] = ()
     open_questions: tuple[str, ...] = ()

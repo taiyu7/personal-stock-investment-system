@@ -9,6 +9,7 @@ from personal_stock_investment_system.research import (
     StockRelation,
     TechnicalAnalysisNote,
     VerifiableHypothesis,
+    VerificationIssue,
     build_research_report_filename,
     render_research_report,
 )
@@ -86,6 +87,18 @@ def test_research_report_renders_fixed_markdown_sections():
                 reference=reference,
             ),
         ),
+        verification_issues=(
+            VerificationIssue(
+                item_type="股票代碼",
+                target="台積電",
+                claim="2330 是台積電",
+                status="已查證",
+                evidence="外部來源確認股票名稱與代碼",
+                external_sources=("https://www.twse.com.tw/",),
+                reference=reference,
+                confidence="高",
+            ),
+        ),
         hypotheses=(
             VerifiableHypothesis(
                 hypothesis="AI 伺服器需求增加時，先進製程供應鏈相對強勢。",
@@ -109,6 +122,9 @@ def test_research_report_renders_fixed_markdown_sections():
     assert "| 分析師 B | 2330 | 台積電 | 中性 | 題材正向但估值需留意 |" in markdown
     assert "| 2330 | 台積電 | AI 伺服器、半導體 | 供應鏈待補 |" in markdown
     assert "需要人工補圖" in markdown
+    assert "## 查核標記" in markdown
+    assert "| 股票代碼 | 台積電 | 2330 是台積電 | 已查證 | 外部來源確認股票名稱與代碼；來源：https://www.twse.com.tw/ |" in markdown
+    assert "## 主流股基期防守表" not in markdown
     assert "估值過高可能抵銷題材利多" in markdown
 
 

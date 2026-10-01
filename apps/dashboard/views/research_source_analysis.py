@@ -14,10 +14,13 @@ from personal_stock_investment_system.research import (
     PhaseOneResearchInput,
     ResearchAnalysisSettings,
     ResearchReportOutputSettings,
+    MopsCompanyDirectoryClient,
     build_research_report_filename,
     run_browser_session_asr_pipeline,
     run_phase_one_research_source_analysis,
+    sync_taiwan_stock_directory,
 )
+from personal_stock_investment_system.storage import TaiwanStockRepository, sqlite_database_path
 
 
 INPUT_KIND_OPTIONS = {
@@ -345,6 +348,37 @@ def render_research_source_analysis_page() -> None:
         st.info("固定研究報告會保留結構化欄位，方便之後做來源次數、族群熱度與講者態度統計。")
     else:
         st.info("投資情報摘要可以包含主流股基期防守表，但不應拿來直接做多來源次數統計。")
+    verify_stock_mentions = False
+    stock_repository = TaiwanStockRepository(sqlite_database_path())
+    local_stock_directory = stock_repository.load_directory()
+    if report_style == "structured_report":
+        verify_stock_mentions = st.checkbox(
+            "使用本機公司清單查核股票代號與公司名稱",
+            value=True,
+            help="報告只讀取本機 SQLite；同步按鈕才會連線官方來源更新資料。",
+        )
+        with st.container(border=True):
+            st.markdown("#### 台股公司清單")
+            if st.button("同步官方上市／上櫃公司清單", icon=":material/sync:"):
+                with st.spinner("同步官方公司清單到本機 SQLite…"):
+                    sync_result = sync_taiwan_stock_directory(
+                        client=MopsCompanyDirectoryClient(),
+                        repository=stock_repository,
+                    )
+                local_stock_directory = sync_result.directory
+                if sync_result.status == "success":
+                    st.success(sync_result.status_message)
+                else:
+                    st.warning(f"{sync_result.status_message} {sync_result.error}")
+            latest_sync = stock_repository.latest_sync(status="success")
+            if local_stock_directory is None:
+                st.warning("本機尚無上市／上櫃公司清單；請先同步，否則本次報告不做股票身分查核。")
+            else:
+                st.write(f"本機可用公司：{len(local_stock_directory.companies)} 筆")
+                if latest_sync is not None:
+                    st.caption(f"最後成功同步（UTC）：{latest_sync.completed_at}")
+                    if latest_sync.is_stale():
+                        st.warning("本機公司清單已超過一天未更新，建議先同步再產生研究報告。")
     analysis_label = st.segmented_control(
         "研究彙整 provider",
         tuple(ANALYSIS_PROVIDER_OPTIONS),
@@ -378,6 +412,7 @@ def render_research_source_analysis_page() -> None:
     )
 
     if st.button("產生研究報告", type="primary"):
+        stock_directory = stock_repository.load_directory() if verify_stock_mentions else None
         try:
             result = run_phase_one_research_source_analysis(
                 PhaseOneResearchInput(
@@ -398,6 +433,7 @@ def render_research_source_analysis_page() -> None:
                     model=analysis_model,
                     report_style=report_style,  # type: ignore[arg-type]
                 ),
+                stock_directory=stock_directory,
             )
         except Exception as error:  # noqa: BLE001 - Streamlit page should show recoverable user input errors.
             st.error(str(error))
