@@ -30,6 +30,7 @@ COPY apps ./apps
 COPY tests ./tests
 COPY config ./config
 COPY docs ./docs
+COPY db ./db
 COPY .env.example ./
 
 RUN mkdir -p data/local data/raw data/processed data/external

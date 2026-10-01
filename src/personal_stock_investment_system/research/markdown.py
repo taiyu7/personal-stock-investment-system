@@ -13,6 +13,7 @@ from personal_stock_investment_system.research.sources import (
     StockRelation,
     TechnicalAnalysisNote,
     VerifiableHypothesis,
+    VerificationIssue,
 )
 
 
@@ -77,6 +78,16 @@ def render_research_report(report: ResearchReport) -> str:
         ]
     )
     lines.extend(_technical_note_row(item) for item in report.technical_notes)
+    lines.extend(
+        [
+            "",
+            "## 查核標記",
+            "",
+            "| 類型 | 對象 | 影片說法 | 查核狀態 | 查核依據/來源 | 原文位置 | 信心 |",
+            "|---|---|---|---|---|---|---|",
+        ]
+    )
+    lines.extend(_verification_issue_row(item) for item in report.verification_issues)
     lines.extend(
         [
             "",
@@ -158,6 +169,23 @@ def _technical_note_row(item: TechnicalAnalysisNote) -> str:
             item.rationale,
             _reference_locator(item.reference),
             item.missing_data,
+        ]
+    )
+
+
+def _verification_issue_row(item: VerificationIssue) -> str:
+    evidence = item.evidence
+    if item.external_sources:
+        evidence = f"{evidence}；來源：" + "、".join(item.external_sources)
+    return _table_row(
+        [
+            item.item_type,
+            item.target,
+            item.claim,
+            item.status,
+            evidence,
+            _reference_locator(item.reference),
+            item.confidence,
         ]
     )
 

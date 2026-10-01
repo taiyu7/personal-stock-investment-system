@@ -1,6 +1,6 @@
 # 資料庫 schema 與 migration 策略
 
-本文定義目前已實作的資料庫狀態，以及未來擴充 schema 與 migration 時的原則。現階段資料庫只保存個人每日復盤資料；市場行情、財報、回測快照與交易明細都還沒有建立正式資料表。
+本文定義目前已實作的資料庫狀態，以及未來擴充 schema 與 migration 時的原則。目前資料庫保存個人每日復盤，以及用來查核研究報告股票身分的上市／上櫃公司主檔；市場行情、財報、回測快照與交易明細仍沒有建立正式資料表。
 
 ## 現行資料庫
 
@@ -8,12 +8,14 @@
 - 預設路徑：`data/local/personal-stock-investment.db`。
 - 設定入口：`.env.example` 的 `DATABASE_URL=sqlite:///data/local/personal-stock-investment.db`。
 - 現行 repository：`src/personal_stock_investment_system/storage/daily_reviews.py`。
+- 台股公司主檔 repository：`src/personal_stock_investment_system/storage/taiwan_stocks.py`。
+- migrations：`db/migrations/`，由 `storage/migrations.py` 依版本套用。
 
 目前 Dashboard 只接受 `sqlite:///` URL。MySQL 與 PostgreSQL 是未來擴充方向，尚未實作 adapter。
 
 ## 現行 schema
 
-`daily_reviews` 由 `DailyReviewRepository.save()` 在第一次儲存時建立。
+第一次使用 repository 時會先套用版本化 migration，並以 `schema_migrations` 記錄版本。既有、尚未有 migration metadata 的 `daily_reviews` 會保留原資料並納入版本管理。
 
 ```sql
 CREATE TABLE IF NOT EXISTS daily_reviews (
@@ -33,9 +35,27 @@ CREATE TABLE IF NOT EXISTS daily_reviews (
 
 儲存策略是 upsert；同一個 `trade_date` 再次儲存會覆寫 `fields_json`、`markdown` 與 `updated_at`。
 
+### taiwan_listed_companies
+
+保存目前有效的上市／上櫃公司主檔，來源為公開資訊觀測站每日 CSV。同步時會先把舊資料標成非有效，再於同一交易中 upsert 新清單；同步失敗不會清空最後成功版本。
+
+主要欄位：
+
+- `stock_code`：股票代號，primary key。
+- `company_name`、`company_full_name`：公司簡稱與完整名稱。
+- `market`：`listed` 或 `otc`。
+- `industry`：官方產業代碼。
+- `source_url`、`source_updated_at`：官方來源與來源資料日期。
+- `synced_at`：寫入本機 SQLite 的 UTC 時間。
+- `is_active`：是否屬於最後成功同步版本。
+
+### reference_data_sync_runs
+
+記錄台股公司主檔每次同步的開始／完成時間、成功或失敗、筆數與錯誤。Dashboard 只在使用者按下同步按鈕時連線官方來源；產生研究報告時只讀本機 SQLite。資料超過一天未更新時會顯示提醒。
+
 ## 資料邊界
 
-SQLite 目前只保存使用者主動填寫的復盤內容與產生的 Markdown。
+SQLite 目前保存使用者主動填寫的復盤內容、產生的 Markdown，以及公開的台股公司參考主檔。
 
 目前不保存：
 
@@ -52,18 +72,16 @@ SQLite 目前只保存使用者主動填寫的復盤內容與產生的 Markdown�
 
 ## Migration 策略
 
-現階段 schema 很小，還沒有 migration framework。之後只要出現第二張表、欄位變更、索引調整或跨版本升級需求，就應先建立正式 migration 流程。
-
-建議策略：
+Issue #58 加入第二組資料表後，已建立最小版本化 migration runner：
 
 1. 在 `db/migrations/` 建立版本化 SQL 檔案。
-2. 以遞增版本命名，例如 `0001_create_daily_reviews.sql`、`0002_add_review_tags.sql`。
+2. 以遞增版本命名，目前為 `0001_create_daily_reviews.sql` 與 `0002_create_taiwan_stock_reference.sql`。
 3. 建立 `schema_migrations` 表，記錄已套用版本與套用時間。
 4. migration 必須可重複執行或在已套用時安全略過。
 5. schema 變更要搭配 repository 測試，確認新舊資料可讀寫。
 6. 涉及個人資料的 migration 不輸出資料內容，只輸出結構與驗證結果。
 
-建議的 migration metadata：
+現行 migration metadata：
 
 ```sql
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -78,7 +96,7 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 
 ### stocks
 
-保存股票基本資料與市場識別。
+此草案已由 `taiwan_listed_companies` 提供第一版公司身分資料；若未來要支援 ETF、海外市場或跨市場 symbol，再另行擴充通用 `stocks` schema。
 
 - `symbol`
 - `market`
@@ -134,7 +152,7 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 
 資料庫近期不需要先擴充到完整股票 DB。較合理的順序是：
 
-1. 維持現行 `daily_reviews` 穩定。
-2. 完成 Dashboard smoke test 與研究工具優先版。
+1. 由使用者以真實逐字稿完成人工驗收，確認 #58 查核標記是否改善報告正確率。
+2. 維持 `daily_reviews` 與台股公司主檔 migrations 穩定。
 3. 在需要回測或資料品質驗證前，設計歷史行情快照 schema。
-4. 再決定是否加入 migration framework 與多資料庫 adapter。
+4. 再決定是否加入多資料庫 adapter。

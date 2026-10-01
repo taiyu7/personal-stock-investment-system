@@ -3,6 +3,7 @@ from datetime import date
 from personal_stock_investment_system.research import (
     PhaseOneResearchInput,
     ResearchReportOutputSettings,
+    TaiwanStockDirectory,
     run_phase_one_research_source_analysis,
 )
 from tests.test_pdf_research import _minimal_text_pdf
@@ -27,6 +28,30 @@ def test_manual_text_entrypoint_produces_research_report_without_local_output():
     assert "| 研究員 A | 2330 | 台積電 | 偏多 |" in result.markdown
     assert result.written_outputs == ()
     assert "未輸出本機檔案" in result.statuses[-1]
+
+
+def test_manual_text_entrypoint_can_apply_official_stock_identity_validation():
+    directory = TaiwanStockDirectory.from_openapi_payloads(
+        [{"公司代號": "8039", "公司簡稱": "台虹", "公司名稱": "台虹科技股份有限公司"}],
+        [],
+        collected_at="2026-08-27T12:00:00+00:00",
+    )
+
+    result = run_phase_one_research_source_analysis(
+        PhaseOneResearchInput(
+            input_kind="manual_text",
+            title="錯碼逐字稿",
+            manual_text="[00:01:23] 研究員 A 認為 8139 台虹，方向偏多。",
+            speakers=("研究員 A",),
+        ),
+        output_settings=ResearchReportOutputSettings.no_local_files(),
+        stock_directory=directory,
+        report_date=date(2026, 8, 13),
+    )
+
+    assert result.report.verification_issues[0].status == "疑似錯誤"
+    assert "候選：8039 台虹" in result.markdown
+    assert "已用官方上市／上櫃公司清單查核" in "\n".join(result.statuses)
 
 
 def test_pdf_entrypoint_completes_pdf_to_markdown_preprocessing(tmp_path):

@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from personal_stock_investment_system.storage.migrations import run_sqlite_migrations
+
 
 @dataclass(frozen=True)
 class DailyReview:
@@ -22,19 +24,9 @@ class DailyReviewRepository:
         self.database_path = Path(database_path)
 
     def save(self, review: DailyReview) -> DailyReview:
-        self.database_path.parent.mkdir(parents=True, exist_ok=True)
+        run_sqlite_migrations(self.database_path)
         updated_at = datetime.now(timezone.utc).isoformat()
         with self._connect() as connection:
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS daily_reviews (
-                    trade_date TEXT PRIMARY KEY,
-                    fields_json TEXT NOT NULL,
-                    markdown TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                )
-                """
-            )
             connection.execute(
                 """
                 INSERT INTO daily_reviews (trade_date, fields_json, markdown, updated_at)
@@ -51,6 +43,7 @@ class DailyReviewRepository:
     def load(self, trade_date: str) -> DailyReview | None:
         if not self.database_path.exists():
             return None
+        run_sqlite_migrations(self.database_path)
         with self._connect() as connection:
             row = connection.execute(
                 "SELECT trade_date, fields_json, markdown, updated_at FROM daily_reviews WHERE trade_date = ?", (trade_date,)
