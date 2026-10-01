@@ -93,6 +93,29 @@ OpenAI 路徑是明確 opt-in：啟用時會把截圖、timestamp、截圖理由
 VLM，檢查可見圖面描述、來源追溯、模糊內容待查證與 #58 驗證邊界。沒有真實截圖前，
 只能確認資料契約與錯誤處理，不能宣稱圖面判讀品質已驗收。
 
+### #39 完整影片研究報告 renderer 與整合 pipeline
+
+> 狀態：已完成程式與 fake 自動測試（完整 Docker tests 122 passed），尚未以真實影片、逐字稿、截圖與 VLM 結果進行人工驗收，也尚未合併。
+
+`research/video_report.py` 提供純整合的 `VideoResearchReportInput` 與
+`run_video_research_report_pipeline`。它只接收前置 adapter 已產生的 media artifact、ASR
+result、LLM analysis result、screenshot result 與 VLM result，不在 renderer 內重新下載
+媒體或呼叫任何模型，因此一般 Docker tests 可完全使用 fake input、不需要網路或 API key。
+
+完整 Markdown 報告保留影片來源、media path、ASR backend/model、LLM provider/model、摘要、
+重要時間軸、股票觀點、族群與公司關聯、技術分析、截圖、VLM observations、風險、反例、
+可驗證假設、待查問題、後續行動與逐字稿引用。LLM 結論會另外整理 timestamp、quote 與
+confidence；截圖不可用、逐字稿缺少、VLM 待查證或部分 adapter 失敗時，pipeline 回傳
+`partial` 與明確 `missing_items`，不會把不完整報告宣稱為完整成功。
+
+輸出沿用既有 `ResearchReportOutputSettings`，可寫入 Obsidian inbox、自選資料夾，或只在
+記憶體中回傳 Markdown 而不落地。媒體、截圖、逐字稿與模型原始回應仍是本機 artifact，
+不提交 Git。本單不新增買賣建議，也不取代 #58 deterministic 股票代號／公司名稱驗證。
+
+待人工驗收條件：使用一組合法真實影片 pipeline artifacts 產生 Markdown，人工核對來源
+metadata、timestamp/quote 引用、圖片連結、部分失敗標示與兩種實際輸出目的地。沒有這組
+真實 artifacts 前，只能確認 fake orchestration、renderer 與檔案輸出契約。
+
 ## Adapter 邊界
 
 未來影音來源應拆成幾個獨立 adapter：
@@ -103,6 +126,7 @@ VLM，檢查可見圖面描述、來源追溯、模糊內容待查證與 #58 驗
 - `speech-to-text adapter`：將音訊轉成逐字稿。
 - `frame capture adapter`：依時間戳擷取影片畫面。
 - `vision-language-model adapter`：只分析合法本機 screenshot artifact；雲端與可選本機 provider 共用同一結果契約。
+- `video report aggregation`：只彙整各 adapter 的結果並渲染／輸出，不在 renderer 中重新呼叫外部 provider。
 - `restricted source adapter`：受限制來源的合法取得流程；待使用者提供既有機制後設計。
 - `browser session provider`：管理專用 Chrome profile 或既有瀏覽器 session，避免每次手動匯出 cookie。
 - `media discovery adapter`：打開頁面、觸發播放、從 browser performance log 即時取得 m3u8 / media request。
