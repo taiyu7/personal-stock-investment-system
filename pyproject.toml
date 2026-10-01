@@ -18,6 +18,7 @@ dependencies = [
 
 [project.scripts]
 psis-browser-asr = "personal_stock_investment_system.research.browser_asr_cli:main"
+psis-capture-screenshot = "personal_stock_investment_system.research.screenshots_cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]

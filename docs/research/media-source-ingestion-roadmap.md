@@ -39,6 +39,31 @@
    - 後續研究報告應能引用「文字逐字稿 + 對應圖面截圖」。
    - 第一版可先支援本機影片或可合法取得的影片檔；公開 YouTube / 會員影片截圖需依素材取得 adapter 的合法邊界處理。
 
+### #31 本機影片時間戳截圖 adapter
+
+> 狀態：已完成程式與自動測試（完整 Docker tests 106 passed），尚未由使用者以真實本機影片人工驗收。
+
+`research/screenshots.py` 提供 provider-neutral 的 `FrameCaptureClient` 與第一版
+`FfmpegFrameCaptureClient`。輸入必須是已合法取得的本機影片 artifact、非負數時間戳、
+截圖理由與可選的逐字稿引用；每張截圖獨立回傳 `available` 或
+`capture_unavailable`，單張失敗不會中止整批研究流程。
+
+截圖輸出預設為本機 JPEG artifact，保留檔案路徑、timestamp、reason、quote 與
+`SourceReference`，並可產生 Markdown 圖片引用。影片與截圖仍屬本機資料，不提交 Git。
+一般 Docker 測試使用 fake command runner，不依賴真實 YouTube、登入狀態或大型影片。
+
+人工驗收可使用任何合法本機影片，不要求影片本身是 K 線圖：
+
+```powershell
+psis-capture-screenshot data/raw/videos/sample.mp4 `
+  --timestamp 83.25 `
+  --reason "確認講者指圖內容" `
+  --quote "這根 K 突破壓力"
+```
+
+也可以重複傳入 `--timestamp` 擷取多張畫面。預設輸出到
+`data/processed/screenshots/`；該資料夾只存本機 artifact，不應提交 Git。
+
 ## Adapter 邊界
 
 未來影音來源應拆成幾個獨立 adapter：
