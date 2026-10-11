@@ -10,7 +10,9 @@ from apps.dashboard.views.research_source_analysis import (
     INPUT_KIND_OPTIONS,
     TRANSCRIPTION_PROVIDER_OPTIONS,
     _is_available_status,
+    _existing_media_candidates,
     _option_value,
+    _safe_media_error,
     build_browser_asr_input,
 )
 
@@ -143,3 +145,20 @@ def test_research_source_analysis_builds_browser_asr_input_from_ui_values():
     assert source_input.openai_transcription_prompt == "台股詞彙：台積電、CPO、瀚荃。"
     assert source_input.openai_chunk_length_seconds == 180.0
     assert source_input.language == "zh"
+
+
+def test_research_source_analysis_redacts_sensitive_media_diagnostics():
+    error = _safe_media_error("ERROR cookie=secret https://example.test/watch?token=secret")
+
+    assert "secret" not in error
+    assert "cookie=[redacted]" in error
+    assert "?[redacted]" in error
+
+
+def test_research_source_analysis_finds_only_nonempty_matching_media_files(tmp_path):
+    matching_media = tmp_path / "1008-節目.mkv"
+    matching_media.write_bytes(b"media")
+    (tmp_path / "1008-節目.webm").write_bytes(b"")
+    (tmp_path / "other.mkv").write_bytes(b"media")
+
+    assert _existing_media_candidates("1008-節目", tmp_path) == (matching_media.resolve(),)

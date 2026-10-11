@@ -6,6 +6,7 @@ from personal_stock_investment_system.research import (
     BrowserSessionAsrInput,
     DiscoveredMediaRequest,
     MediaArtifact,
+    run_existing_media_asr_pipeline,
     run_browser_session_asr_pipeline,
 )
 from personal_stock_investment_system.research.browser_asr import _format_cli_result
@@ -96,6 +97,48 @@ def test_browser_session_asr_pipeline_can_build_research_source_after_transcript
     assert result.source_import_result.source.source_url == "https://example.test/member-video"
     assert "[00:01] 投顧提到 2330 與 AI 需求" in result.source_import_result.source.raw_text
     assert speech_to_text.audio_path == (tmp_path / "wav" / "episode-1-16k-mono.wav").resolve()
+
+
+def test_existing_media_can_continue_to_asr_without_downloading_again(tmp_path):
+    class ReusePreprocessor:
+        def to_asr_wav(self, artifact: MediaArtifact, output_path: Path) -> MediaArtifact:
+            assert artifact.path.name == "downloaded.mkv"
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_bytes(b"fake wav")
+            return MediaArtifact(path=output_path, source_url=artifact.source_url, artifact_type="audio_wav")
+
+    existing_media = tmp_path / "raw" / "downloaded.mkv"
+    existing_media.parent.mkdir(parents=True)
+    existing_media.write_bytes(b"fake media")
+    speech_to_text = FakeSpeechToText()
+
+    result = run_existing_media_asr_pipeline(
+        BrowserSessionAsrInput(
+            page_url="https://example.test/member-video",
+            output_stem="episode-1",
+            title="會員影片測試",
+            raw_output_dir=tmp_path / "raw",
+            wav_output_dir=tmp_path / "wav",
+        ),
+        existing_media,
+        preprocessor=ReusePreprocessor(),
+        speech_to_text=speech_to_text,
+    )
+
+    assert result.status == "available"
+    assert result.media_result.artifact is not None
+    assert result.media_result.artifact.path == (tmp_path / "wav" / "episode-1-16k-mono.wav").resolve()
+    assert speech_to_text.audio_path == (tmp_path / "wav" / "episode-1-16k-mono.wav").resolve()
+
+
+def test_existing_media_reports_a_clear_error_when_path_is_missing(tmp_path):
+    result = run_existing_media_asr_pipeline(
+        BrowserSessionAsrInput(page_url="https://example.test/member-video"),
+        tmp_path / "missing.mkv",
+    )
+
+    assert result.status == "media_unavailable"
+    assert "不存在" in result.media_result.status_message
 
 
 def test_browser_session_asr_cli_result_includes_transcription_error(tmp_path):

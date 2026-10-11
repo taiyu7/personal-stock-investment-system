@@ -39,6 +39,7 @@ from personal_stock_investment_system.research.asr import (
 from personal_stock_investment_system.research.browser_asr import (
     BrowserSessionAsrInput,
     BrowserSessionAsrResult,
+    run_existing_media_asr_pipeline,
     run_browser_session_asr_pipeline,
 )
 from personal_stock_investment_system.research.entrypoint import (
@@ -270,6 +271,7 @@ __all__ = [
     "render_investment_brief",
     "resolve_research_report_output_destinations",
     "run_browser_session_asr_pipeline",
+    "run_existing_media_asr_pipeline",
     "run_phase_one_research_source_analysis",
     "run_video_research_report_pipeline",
     "select_downloadable_media_request",

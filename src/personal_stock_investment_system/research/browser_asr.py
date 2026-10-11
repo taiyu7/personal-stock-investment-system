@@ -21,7 +21,9 @@ from personal_stock_investment_system.research.media import (
     BrowserMediaDiscoveryClient,
     BrowserSessionMediaAcquirer,
     FfmpegAudioPreprocessor,
+    MediaAcquisitionError,
     MediaAcquisitionResult,
+    MediaArtifact,
     MediaDownloadClient,
     SeleniumBrowserMediaDiscovery,
     SeleniumBrowserSessionConfig,
@@ -100,6 +102,69 @@ def run_browser_session_asr_pipeline(
     if not media_result.is_available() or media_result.artifact is None:
         return BrowserSessionAsrResult(media_result=media_result)
 
+    return _transcribe_media_result(source_input, media_result, speech_to_text=speech_to_text)
+
+
+def run_existing_media_asr_pipeline(
+    source_input: BrowserSessionAsrInput,
+    media_path: Path,
+    *,
+    preprocessor: AudioPreprocessor | None = None,
+    speech_to_text: SpeechToTextClient | None = None,
+) -> BrowserSessionAsrResult:
+    """Continue ASR from an already-downloaded local media artifact."""
+    resolved_media_path = media_path.expanduser().resolve()
+    if not resolved_media_path.is_file():
+        return BrowserSessionAsrResult(
+            media_result=MediaAcquisitionResult(
+                status="media_unavailable",
+                source_identifier=str(media_path),
+                status_message="指定的既有媒體檔不存在，無法接續轉錄。",
+                error=f"missing_media_file: {resolved_media_path}",
+            )
+        )
+
+    output_stem = source_input.output_stem or resolved_media_path.stem
+    wav_path = source_input.wav_output_dir / f"{safe_filename(output_stem)}-16k-mono.wav"
+    raw_artifact = MediaArtifact(
+        path=resolved_media_path,
+        source_url=source_input.page_url,
+        artifact_type="stream",
+        notes="reused_existing_media=true",
+    )
+    try:
+        wav_artifact = (preprocessor or FfmpegAudioPreprocessor()).to_asr_wav(raw_artifact, wav_path)
+    except MediaAcquisitionError as error:
+        return BrowserSessionAsrResult(
+            media_result=MediaAcquisitionResult(
+                status=error.status,
+                source_identifier=str(resolved_media_path),
+                status_message=error.status_message,
+                error=error.error,
+            )
+        )
+
+    return _transcribe_media_result(
+        source_input,
+        MediaAcquisitionResult(
+            status="available",
+            source_identifier=str(resolved_media_path),
+            artifact=wav_artifact,
+            status_message="已使用既有媒體轉成 16 kHz mono WAV，準備轉錄。",
+        ),
+        speech_to_text=speech_to_text,
+    )
+
+
+def _transcribe_media_result(
+    source_input: BrowserSessionAsrInput,
+    media_result: MediaAcquisitionResult,
+    *,
+    speech_to_text: SpeechToTextClient | None,
+) -> BrowserSessionAsrResult:
+    if media_result.artifact is None:
+        return BrowserSessionAsrResult(media_result=media_result)
+
     transcriber = speech_to_text or _default_transcriber(source_input)
     if transcriber is None:
         return BrowserSessionAsrResult(media_result=media_result)
@@ -108,7 +173,7 @@ def run_browser_session_asr_pipeline(
     source_import_result = build_local_audio_research_source(
         media_result.artifact.path,
         client=_FixedTranscriptionClient(transcription),
-        title=source_input.title or output_stem,
+        title=source_input.title or source_input.output_stem or media_result.artifact.path.stem,
         source_url=source_input.page_url,
         notes="source=browser_session_asr",
     )

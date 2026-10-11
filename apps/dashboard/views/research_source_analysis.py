@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 import streamlit as st
 
@@ -17,9 +19,11 @@ from personal_stock_investment_system.research import (
     MopsCompanyDirectoryClient,
     build_research_report_filename,
     run_browser_session_asr_pipeline,
+    run_existing_media_asr_pipeline,
     run_phase_one_research_source_analysis,
     sync_taiwan_stock_directory,
 )
+from personal_stock_investment_system.research.media import safe_filename
 from personal_stock_investment_system.storage import TaiwanStockRepository, sqlite_database_path
 
 
@@ -137,8 +141,10 @@ def _render_browser_asr_status(result: BrowserSessionAsrResult) -> None:
         st.success("音檔已取得並轉成 16 kHz mono WAV。")
     else:
         st.error(result.media_result.status_message or "音檔取得失敗。")
+        if result.media_result.error:
+            st.code(_safe_media_error(result.media_result.error), language=None)
     if result.media_result.artifact is not None:
-            st.code(str(result.media_result.artifact.path), language=None)
+        st.code(str(result.media_result.artifact.path), language=None)
     if result.transcription is not None:
         if _is_available_status(result.transcription.status):
             st.success("逐字稿已產生。")
@@ -150,6 +156,32 @@ def _render_browser_asr_status(result: BrowserSessionAsrResult) -> None:
             st.warning(warning)
         if result.transcription.error:
             st.error(result.transcription.error)
+
+
+def _safe_media_error(error: str) -> str:
+    redacted = re.sub(
+        r"(?i)(authorization|cookie|api[_ -]?key|token|password)\s*[:=]\s*\S+",
+        r"\1=[redacted]",
+        error,
+    )
+    return re.sub(
+        r"https?://[^\s?]+\?[^\s]+",
+        lambda match: urlunsplit(urlsplit(match.group())._replace(query="[redacted]")),
+        redacted,
+    )
+
+
+def _existing_media_candidates(output_stem: str, raw_output_dir: Path = Path("data/raw/browser-media")) -> tuple[Path, ...]:
+    safe_stem = safe_filename(output_stem)
+    if not safe_stem or not raw_output_dir.exists():
+        return ()
+    return tuple(path.resolve() for path in raw_output_dir.glob(f"{safe_stem}.*") if path.is_file() and path.stat().st_size > 0)
+
+
+def _store_transcript_result(result: BrowserSessionAsrResult, page_url: str) -> None:
+    if result.transcription is not None and result.transcription.transcript_path is not None:
+        st.session_state["research_asr_transcript_json_path"] = str(result.transcription.transcript_path)
+        st.session_state["research_asr_source_url"] = page_url.strip()
 
 
 def render_research_source_analysis_page() -> None:
@@ -294,14 +326,46 @@ def render_research_source_analysis_page() -> None:
                 st.error(str(error))
             else:
                 _render_browser_asr_status(browser_asr_result)
-                if (
-                    browser_asr_result.transcription is not None
-                    and browser_asr_result.transcription.transcript_path is not None
-                ):
-                    st.session_state["research_asr_transcript_json_path"] = str(
-                        browser_asr_result.transcription.transcript_path
+                _store_transcript_result(browser_asr_result, browser_page_url)
+
+    if transcribe_submitted and "browser_asr_result" in locals() and not browser_asr_result.media_result.is_available():
+        media_candidates = _existing_media_candidates(output_stem)
+        if media_candidates:
+            st.warning("偵測到同名媒體檔，無須重新下載即可接續 WAV 與 ASR。")
+            selected_media_path = st.selectbox(
+                "使用既有媒體檔",
+                media_candidates,
+                format_func=str,
+                key="research_existing_media_path",
+            )
+            if st.button("使用既有媒體繼續轉錄", icon=":material/play_arrow:", key="resume_existing_media"):
+                with st.spinner("從既有媒體轉檔並產生逐字稿…"):
+                    resumed_result = run_existing_media_asr_pipeline(
+                        build_browser_asr_input(
+                            page_url=browser_page_url,
+                            output_stem=output_stem,
+                            title=browser_title,
+                            asr_provider=transcription_provider,
+                            chrome_user_data_dir=chrome_user_data_dir,
+                            chrome_binary_path=chrome_binary_path,
+                            chromedriver_path=chromedriver_path,
+                            headless=headless,
+                            settle_seconds=float(settle_seconds),
+                            playback_wait_seconds=float(playback_wait_seconds),
+                            yt_dlp_cookies_from_browser=yt_dlp_cookies_from_browser,
+                            yt_dlp_remote_components=yt_dlp_remote_components,
+                            yt_dlp_download_page_url=yt_dlp_download_page_url,
+                            openvino_model_dir=openvino_model_dir,
+                            openvino_device=openvino_device,
+                            openai_transcription_model=openai_transcription_model,
+                            openai_transcription_prompt=openai_transcription_prompt,
+                            openai_chunk_length_seconds=float(openai_chunk_length_seconds),
+                            language=language,
+                        ),
+                        selected_media_path,
                     )
-                    st.session_state["research_asr_source_url"] = browser_page_url.strip()
+                _render_browser_asr_status(resumed_result)
+                _store_transcript_result(resumed_result, browser_page_url)
 
     st.markdown("### 2. 產生研究報告")
     default_input_label = _selected_input_label_from_transcript(st.session_state["research_asr_transcript_json_path"])
