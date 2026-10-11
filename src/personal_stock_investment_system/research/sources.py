@@ -10,7 +10,7 @@ from uuid import uuid4
 SourceType = Literal["youtube_public", "pdf", "manual_text", "local_audio", "local_video"]
 LocatorType = Literal["timestamp", "page", "section", "unknown"]
 OpinionDirection = Literal["偏多", "偏空", "中性", "未判定"]
-VerificationStatus = Literal["已查證", "待查證", "疑似錯誤", "衝突", "未判定"]
+VerificationStatus = Literal["已查證", "已修正", "待查證", "疑似錯誤", "衝突", "未判定"]
 SourceImportStatus = Literal[
     "available",
     "manual_fallback",
@@ -118,6 +118,7 @@ class CompanyProfileNote:
 @dataclass(frozen=True)
 class TechnicalAnalysisNote:
     stock: str
+    company: str = ""
     signal: str = "未判定"
     chart_context: str = "未判定"
     rationale: str = "未判定"

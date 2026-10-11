@@ -36,7 +36,7 @@ def test_fixed_transcript_can_be_analyzed_into_fixed_markdown_report():
     assert "| 2330 | 台積電 | 晶圓代工，產品包含先進製程服務 | 先進製程服務 |" in markdown
     assert "| 2382 | 廣達 | 待查證：來源未說明公司主要業務。 | 待查證 |" in markdown
     assert "## 技術分析" in markdown
-    assert "| 2382 | 突破、回測、月線、帶量長紅、支撐 | 需要人工補圖" in markdown
+    assert "| 2382 | 廣達 | 突破、回測、月線、帶量長紅、支撐 | 需要人工補圖" in markdown
     assert "## 可驗證假設" in markdown
     assert "AI 伺服器、半導體需求或題材升溫時，台積電可能相對受惠。" in markdown
     assert "2382出現突破、回測、月線、帶量長紅、支撐時，後續強弱可被驗證。" in markdown

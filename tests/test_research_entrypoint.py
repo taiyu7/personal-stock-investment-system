@@ -2,8 +2,12 @@ from datetime import date
 
 from personal_stock_investment_system.research import (
     PhaseOneResearchInput,
+    ResearchReport,
     ResearchReportOutputSettings,
+    ResearchSource,
     TaiwanStockDirectory,
+    VerificationIssue,
+    render_research_report,
     run_phase_one_research_source_analysis,
 )
 from tests.test_pdf_research import _minimal_text_pdf
@@ -52,6 +56,28 @@ def test_manual_text_entrypoint_can_apply_official_stock_identity_validation():
     assert result.report.verification_issues[0].status == "疑似錯誤"
     assert "候選：8039 台虹" in result.markdown
     assert "已用官方上市／上櫃公司清單查核" in "\n".join(result.statuses)
+
+
+def test_manual_review_items_are_rendered_before_source_information():
+    markdown = render_research_report(
+        ResearchReport(
+            source=ResearchSource(source_type="manual_text", title="代號名稱衝突", raw_text=""),
+            verification_issues=(
+                VerificationIssue(
+                    item_type="股票代號／公司名稱",
+                    target="6153 建策",
+                    status="衝突",
+                    evidence="代號 6153 對應嘉聯益；名稱近似 3653 健策，需人工確認。",
+                ),
+            ),
+        )
+    )
+
+    alert_position = markdown.index("## ⚠️ 產出前先人工確認")
+    source_position = markdown.index("## 來源資訊")
+    assert alert_position < source_position
+    assert "6153 建策" in markdown[alert_position:source_position]
+    assert "3653 健策" in markdown[alert_position:source_position]
 
 
 def test_pdf_entrypoint_completes_pdf_to_markdown_preprocessing(tmp_path):

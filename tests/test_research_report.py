@@ -80,6 +80,7 @@ def test_research_report_renders_fixed_markdown_sections():
         technical_notes=(
             TechnicalAnalysisNote(
                 stock="2330",
+                company="台積電",
                 signal="未判定",
                 chart_context="需要人工補圖：原文提到圖面，但逐字稿未包含畫面資訊。",
                 rationale="逐字稿缺少圖面資訊",
@@ -121,6 +122,7 @@ def test_research_report_renders_fixed_markdown_sections():
     assert "| 研究員 A | 2330 | 台積電 | 偏多 | AI 需求帶動先進製程 |" in markdown
     assert "| 分析師 B | 2330 | 台積電 | 中性 | 題材正向但估值需留意 |" in markdown
     assert "| 2330 | 台積電 | AI 伺服器、半導體 | 供應鏈待補 |" in markdown
+    assert "| 2330 | 台積電 | 未判定 |" in markdown
     assert "需要人工補圖" in markdown
     assert "## 查核標記" in markdown
     assert "| 股票代碼 | 台積電 | 2330 是台積電 | 已查證 | 外部來源確認股票名稱與代碼；來源：https://www.twse.com.tw/ |" in markdown

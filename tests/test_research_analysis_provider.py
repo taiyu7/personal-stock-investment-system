@@ -67,6 +67,7 @@ def test_openai_provider_returns_structured_report_from_fake_response():
     assert result.report.summary == "台積電受惠 AI 伺服器需求，研究員 A 看法偏多。"
     assert result.report.stock_opinions[0].stock == "2330"
     assert result.report.stock_opinions[0].reference.display_locator() == "00:00:10"
+    assert result.report.technical_notes[0].company == "台積電"
     assert result.markdown == ""
     assert client._client is not None
     assert client._client.responses.kwargs["text"]["format"]["name"] == "stock_research_analysis"
@@ -282,7 +283,22 @@ def _openai_payload_text() -> str:
   ],
   "stock_relations": [],
   "company_profiles": [],
-  "technical_notes": [],
+  "technical_notes": [
+    {
+      "stock": "2330",
+      "company": "台積電",
+      "signal": "站上月線",
+      "chart_context": "來源未提供圖面",
+      "rationale": "逐字稿提到月線",
+      "missing_data": "K 線截圖",
+      "reference": {
+        "locator_type": "timestamp",
+        "locator": "00:00:10",
+        "quote": "研究員 A 認為 2330 台積電受惠 AI 伺服器需求，方向偏多。",
+        "confidence": "中"
+      }
+    }
+  ],
   "hypotheses": [],
   "risks_and_counterexamples": ["未判定"],
   "open_questions": ["台積電 AI 伺服器相關營收占比需要查證。"],

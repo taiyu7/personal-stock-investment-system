@@ -28,6 +28,7 @@ def render_research_report(report: ResearchReport) -> str:
     lines = [
         "# 研究來源分析報告",
         "",
+        *_manual_review_alert_lines(report.verification_issues),
         "## 來源資訊",
         "",
         f"- 類型：{source.source_type}",
@@ -73,8 +74,8 @@ def render_research_report(report: ResearchReport) -> str:
             "",
             "## 技術分析",
             "",
-            "| 股票 | 技術訊號 | 對應圖面 | 判斷依據 | 原文位置 | 待補資料 |",
-            "|---|---|---|---|---|---|",
+            "| 股票 | 公司 | 技術訊號 | 對應圖面 | 判斷依據 | 原文位置 | 待補資料 |",
+            "|---|---|---|---|---|---|---|",
         ]
     )
     lines.extend(_technical_note_row(item) for item in report.technical_notes)
@@ -116,6 +117,26 @@ def render_research_report(report: ResearchReport) -> str:
         ]
     )
     return "\n".join(lines)
+
+
+def _manual_review_alert_lines(issues: tuple[VerificationIssue, ...]) -> list[str]:
+    uncertain = tuple(issue for issue in issues if issue.status not in {"已查證", "已修正"})
+    if not uncertain:
+        return []
+    lines = [
+        "## ⚠️ 產出前先人工確認",
+        "",
+        "> 下列項目無法由本機公司清單安全自動修正，請先核對原始影片或逐字稿。",
+        "",
+    ]
+    for issue in uncertain:
+        locator = _reference_locator(issue.reference)
+        lines.append(
+            f"- **{_display(issue.status)}｜{_display(issue.target)}**："
+            f"{_display(issue.evidence)}（原文位置：{locator}）"
+        )
+    lines.append("")
+    return lines
 
 
 def _stock_opinion_row(item: StockOpinion) -> str:
@@ -164,6 +185,7 @@ def _technical_note_row(item: TechnicalAnalysisNote) -> str:
     return _table_row(
         [
             item.stock,
+            item.company,
             item.signal,
             item.chart_context,
             item.rationale,
