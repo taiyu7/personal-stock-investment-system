@@ -3,6 +3,7 @@
 from .daily_reviews import DailyReview, DailyReviewRepository
 from .database import DEFAULT_DATABASE_URL, sqlite_database_path
 from .migrations import run_sqlite_migrations
+from .sqlite_browser import SQLiteBrowserRepository, SQLiteTableColumn
 from .taiwan_stocks import ReferenceDataSyncRun, TaiwanStockRepository
 
 __all__ = [
@@ -10,6 +11,8 @@ __all__ = [
     "DailyReview",
     "DailyReviewRepository",
     "ReferenceDataSyncRun",
+    "SQLiteBrowserRepository",
+    "SQLiteTableColumn",
     "TaiwanStockRepository",
     "run_sqlite_migrations",
     "sqlite_database_path",
