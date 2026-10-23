@@ -53,9 +53,13 @@ CREATE TABLE IF NOT EXISTS daily_reviews (
 
 記錄台股公司主檔每次同步的開始／完成時間、成功或失敗、筆數與錯誤。Dashboard 只在使用者按下同步按鈕時連線官方來源；產生研究報告時只讀本機 SQLite。資料超過一天未更新時會顯示提醒。
 
+### research_correction_rules
+
+保存使用者在研究報告人工查核後確認的永久修正規則。規則以原始代號與原始名稱精確比對，並記錄分類、標準代號／名稱、啟用狀態與建立／更新時間。台股標準身分套用前仍須存在於目前本機官方公司清單；外國股票與 ETF 的標準代號／名稱由使用者手動輸入，不會混入台股官方清單，也不納入台股排名。匯入舊 Markdown 產生統計報告時會套用已保存的精確規則，但不改寫原始下載檔。
+
 ## 資料邊界
 
-SQLite 目前保存使用者主動填寫的復盤內容、產生的 Markdown，以及公開的台股公司參考主檔。
+SQLite 目前保存使用者主動填寫的復盤內容、公開的台股公司參考主檔，以及使用者建立的研究報告永久修正規則。研究報告輸出仍由使用者預覽與下載，不自動存入資料庫。
 
 目前不保存：
 
@@ -75,7 +79,7 @@ SQLite 目前保存使用者主動填寫的復盤內容、產生的 Markdown，�
 Issue #58 加入第二組資料表後，已建立最小版本化 migration runner：
 
 1. 在 `db/migrations/` 建立版本化 SQL 檔案。
-2. 以遞增版本命名，目前為 `0001_create_daily_reviews.sql` 與 `0002_create_taiwan_stock_reference.sql`。
+2. 以遞增版本命名，目前為 `0001_create_daily_reviews.sql`、`0002_create_taiwan_stock_reference.sql`、`0003_create_research_correction_rules.sql` 與 `0004_allow_etf_correction_rules.sql`。
 3. 建立 `schema_migrations` 表，記錄已套用版本與套用時間。
 4. migration 必須可重複執行或在已套用時安全略過。
 5. schema 變更要搭配 repository 測試，確認新舊資料可讀寫。
@@ -96,7 +100,7 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 
 ### stocks
 
-此草案已由 `taiwan_listed_companies` 提供第一版公司身分資料；若未來要支援 ETF、海外市場或跨市場 symbol，再另行擴充通用 `stocks` schema。
+此草案已由 `taiwan_listed_companies` 提供第一版台股公司身分資料；ETF 與外國股票目前只支援人工分類及代號／名稱，不會作為通用公司主檔或台股排名來源。若未來需要跨市場自動查核，再另行擴充通用 `stocks` schema。
 
 - `symbol`
 - `market`

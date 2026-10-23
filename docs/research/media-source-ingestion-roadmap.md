@@ -8,11 +8,11 @@
 
 ## 優先順序
 
-1. **真實公開 YouTube 字幕 adapter**
+1. **公開 YouTube 中文字幕 adapter（已接入快速報告流程）**
    - 讀取公開影片的人工 CC 與 automatic captions。
-   - 支援語言優先序：`zh-TW`、`zh-Hant`、`zh`、`en`。
-   - 清楚區分：有字幕、字幕停用、影片不可用、需要登入、網路失敗、語言不存在。
-   - 純核心測試使用 fake/mock；真實 YouTube 驗收放 integration，不混入一般單元測試。
+   - 語言順序為 `zh-TW`，再嘗試 `zh-Hans`／`zh-CN`；簡體結果先轉為繁體中文。
+   - 不讀取其他語言。沒有可用中文字幕或字幕請求失敗時，快速流程才改用 OpenAI 音訊轉錄。
+   - 純核心測試使用 fake/mock；YouTube 網路錯誤、429 與真實影片端到端穩定性仍需人工驗收。
 
 2. **YouTube 會員影片 / 受限制影片**
    - 可參考既有 Selenium crawler 或瀏覽器自動化原型，但公開文件不依賴作者本機路徑。
@@ -41,7 +41,7 @@
 
 ### #31 本機影片時間戳截圖 adapter
 
-> 狀態：已完成程式與自動測試（完整 Docker tests 106 passed），尚未由使用者以真實本機影片人工驗收。
+> 狀態：已合併到 main，仍待使用者以真實本機影片人工驗收。
 
 `research/screenshots.py` 提供 provider-neutral 的 `FrameCaptureClient` 與第一版
 `FfmpegFrameCaptureClient`。輸入必須是已合法取得的本機影片 artifact、非負數時間戳、
@@ -66,7 +66,7 @@ psis-capture-screenshot data/raw/videos/sample.mp4 `
 
 ### #67 VLM 技術分析圖面理解
 
-> 狀態：已完成程式與 fake 自動測試（完整 Docker tests 119 passed），但因目前沒有真實 K 線截圖，尚未進行真實 OpenAI VLM 或人工品質驗收，也尚未合併。
+> 狀態：已合併到 main，fake 自動測試通過；目前沒有真實 K 線截圖，尚未進行真實 OpenAI VLM 或人工品質驗收。
 
 `research/vlm.py` 提供 provider-neutral 的 `VisionLanguageModelClient`、結構化結果契約、
 測試專用 fake client、OpenAI adapter，以及可選本機 VLM 的介面占位。輸入只消費 #31
@@ -95,7 +95,7 @@ VLM，檢查可見圖面描述、來源追溯、模糊內容待查證與 #58 驗
 
 ### #39 完整影片研究報告 renderer 與整合 pipeline
 
-> 狀態：已完成程式與 fake 自動測試（完整 Docker tests 122 passed），尚未以真實影片、逐字稿、截圖與 VLM 結果進行人工驗收，也尚未合併。
+> 狀態：已合併到 main，fake 自動測試通過；尚未以真實影片、逐字稿、截圖與 VLM 結果進行人工驗收。
 
 `research/video_report.py` 提供純整合的 `VideoResearchReportInput` 與
 `run_video_research_report_pipeline`。它只接收前置 adapter 已產生的 media artifact、ASR
@@ -115,6 +115,14 @@ confidence；截圖不可用、逐字稿缺少、VLM 待查證或部分 adapter 
 待人工驗收條件：使用一組合法真實影片 pipeline artifacts 產生 Markdown，人工核對來源
 metadata、timestamp/quote 引用、圖片連結、部分失敗標示與兩種實際輸出目的地。沒有這組
 真實 artifacts 前，只能確認 fake orchestration、renderer 與檔案輸出契約。
+
+### Dashboard「投顧影片VLM 技術分析」操作頁
+
+> 狀態：已加入 Sidebar 菜單與第一版操作流程，尚未人工驗收，並明確標示未完成。
+
+頁面目前可接收可讀取的本機影片路徑與 ASR 逐字稿 JSON，依使用者輸入的時間戳、理由與逐字稿引用呼叫 #31 截圖 adapter；接著可略過 VLM、選擇預留的本機 adapter，或在使用者明確勾選同意後，把截圖與引用送至 OpenAI VLM。頁面會把結果交給 #39 renderer 預覽／下載 Markdown，也可選擇輸出到 Obsidian 或自選路徑。
+
+這仍是未完成的操作介面：尚未以真實素材走過瀏覽器端到端驗收；本機影片需先放在 Dashboard 執行環境可讀取的位置；VLM 雲端品質、錯誤復原、批次截圖體驗與報告預覽都待後續優化。下一個優先優化項目是「研究來源分析」頁面。
 
 ## Adapter 邊界
 
@@ -388,5 +396,5 @@ Dashboard container 配置：
 目前限制：
 
 - Docker Dashboard 使用乾淨 headless Chromium；若影片需要 Windows Chrome 登入狀態，仍可能要使用本機 CLI 或後續 profile 掛載策略。
-- 真實 YouTube CC / automatic captions adapter 尚未接上。
-- 尚未支援多檔逐字稿一起推理、股票代號清單校正與專有詞彙增強；後續分別由 #57、#58、#59 處理。
+- 字幕擷取已在快速影音報告流程實作；YouTube 網路錯誤與 429 可能令字幕讀取失敗，並觸發 OpenAI 音訊轉錄後備流程。
+- 多來源統計與股票身分查核已接入；統計排行依不同講者數、不同節目數、可追溯提及次數。專有詞彙增強仍待 #59 處理。

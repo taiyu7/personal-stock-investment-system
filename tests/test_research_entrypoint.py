@@ -2,8 +2,12 @@ from datetime import date
 
 from personal_stock_investment_system.research import (
     PhaseOneResearchInput,
+    ResearchReport,
     ResearchReportOutputSettings,
+    ResearchSource,
     TaiwanStockDirectory,
+    VerificationIssue,
+    render_research_report,
     run_phase_one_research_source_analysis,
 )
 from tests.test_pdf_research import _minimal_text_pdf
@@ -54,6 +58,28 @@ def test_manual_text_entrypoint_can_apply_official_stock_identity_validation():
     assert "已用官方上市／上櫃公司清單查核" in "\n".join(result.statuses)
 
 
+def test_manual_review_items_are_rendered_before_source_information():
+    markdown = render_research_report(
+        ResearchReport(
+            source=ResearchSource(source_type="manual_text", title="代號名稱衝突", raw_text=""),
+            verification_issues=(
+                VerificationIssue(
+                    item_type="股票代號／公司名稱",
+                    target="6153 建策",
+                    status="衝突",
+                    evidence="代號 6153 對應嘉聯益；名稱近似 3653 健策，需人工確認。",
+                ),
+            ),
+        )
+    )
+
+    alert_position = markdown.index("## ⚠️ 產出前先人工確認")
+    source_position = markdown.index("## 來源資訊")
+    assert alert_position < source_position
+    assert "6153 建策" in markdown[alert_position:source_position]
+    assert "3653 健策" in markdown[alert_position:source_position]
+
+
 def test_pdf_entrypoint_completes_pdf_to_markdown_preprocessing(tmp_path):
     pdf_path = tmp_path / "sample.pdf"
     pdf_path.write_bytes(_minimal_text_pdf("2330 TSMC AI server demand", "valuation risk"))
@@ -72,6 +98,8 @@ def test_pdf_entrypoint_completes_pdf_to_markdown_preprocessing(tmp_path):
 
 
 def test_youtube_entrypoint_shows_transcript_unavailable_fallback():
+    from personal_stock_investment_system.research.entrypoint import TranscriptUnavailableYouTubeClient
+
     result = run_phase_one_research_source_analysis(
         PhaseOneResearchInput(
             input_kind="youtube_public",
@@ -79,6 +107,7 @@ def test_youtube_entrypoint_shows_transcript_unavailable_fallback():
             youtube_url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
         ),
         output_settings=ResearchReportOutputSettings.no_local_files(),
+        youtube_client=TranscriptUnavailableYouTubeClient(),
         report_date=date(2026, 8, 13),
     )
 
@@ -89,6 +118,27 @@ def test_youtube_entrypoint_shows_transcript_unavailable_fallback():
     assert "YouTube 逐字稿狀態：transcript_unavailable" in result.statuses
     assert "未取得公開逐字稿" in "\n".join(result.statuses)
     assert "## 一句話摘要\n\n未判定" in result.markdown
+
+
+def test_youtube_entrypoint_uses_available_captions(monkeypatch):
+    from personal_stock_investment_system.research.asr import AsrTranscriptSegment
+    from personal_stock_investment_system.research.youtube_captions import CaptionFetchResult
+    import personal_stock_investment_system.research.youtube_captions as captions_module
+
+    monkeypatch.setattr(
+        captions_module, "fetch_youtube_captions",
+        lambda url: CaptionFetchResult((AsrTranscriptSegment("2330 台積電", 15.0, 18.0),), "zh-TW"),
+    )
+    result = run_phase_one_research_source_analysis(
+        PhaseOneResearchInput(
+            input_kind="youtube_public", title="字幕影片",
+            youtube_url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        ),
+        output_settings=ResearchReportOutputSettings.no_local_files(),
+        report_date=date(2026, 8, 13),
+    )
+    assert result.import_result.status == "available"
+    assert "[00:15] 2330 台積電" in result.source.raw_text
 
 
 def test_entrypoint_can_write_to_selected_temp_destinations(tmp_path):

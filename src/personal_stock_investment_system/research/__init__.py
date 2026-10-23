@@ -37,9 +37,23 @@ from personal_stock_investment_system.research.asr import (
     load_asr_transcription_result,
 )
 from personal_stock_investment_system.research.browser_asr import (
+    BrowserSessionAsrProgressCallback,
     BrowserSessionAsrInput,
     BrowserSessionAsrResult,
+    run_existing_media_asr_pipeline,
     run_browser_session_asr_pipeline,
+)
+from personal_stock_investment_system.research.quick_video_report import (
+    QuickVideoReportBatchItem,
+    QuickVideoReportBatchResult,
+    QuickReportProgressEvent,
+    QuickReportProgressCallback,
+    QuickReportStepStatus,
+    QuickVideoReportInput,
+    QuickVideoReportResult,
+    build_quick_video_report_filename,
+    run_quick_video_research_report,
+    run_quick_video_report_batch,
 )
 from personal_stock_investment_system.research.entrypoint import (
     PhaseOneResearchInput,
@@ -49,6 +63,7 @@ from personal_stock_investment_system.research.entrypoint import (
 )
 from personal_stock_investment_system.research.markdown import (
     build_research_report_filename,
+    parse_research_report_markdown,
     render_research_report,
 )
 from personal_stock_investment_system.research.media import (
@@ -98,6 +113,7 @@ from personal_stock_investment_system.research.pdf import (
 )
 from personal_stock_investment_system.research.sources import (
     CompanyProfileNote,
+    EntityClassification,
     ResearchReport,
     ResearchSource,
     ResearchSourceImportResult,
@@ -109,6 +125,18 @@ from personal_stock_investment_system.research.sources import (
     VerifiableHypothesis,
     VerificationIssue,
     VerificationStatus,
+)
+from personal_stock_investment_system.research.correction_rules import (
+    ResearchCorrectionRule,
+    ResearchCorrectionRuleRepository,
+    apply_research_correction_rules,
+    parse_issue_target,
+)
+from personal_stock_investment_system.research.statistical_report import (
+    StatisticalReportResult,
+    StockConsensus,
+    build_stock_consensus,
+    generate_statistical_report,
 )
 from personal_stock_investment_system.research.stock_validation import (
     TWSE_LISTED_COMPANIES_URL,
@@ -156,6 +184,11 @@ from personal_stock_investment_system.research.youtube import (
 
 __all__ = [
     "CompanyProfileNote",
+    "EntityClassification",
+    "ResearchCorrectionRule",
+    "ResearchCorrectionRuleRepository",
+    "apply_research_correction_rules",
+    "parse_issue_target",
     "BriefDefenseNote",
     "BriefStockNote",
     "BriefVerificationSource",
@@ -213,6 +246,7 @@ __all__ = [
     "BreezeAsrCliTranscriber",
     "BrowserSessionAsrInput",
     "BrowserSessionAsrResult",
+    "BrowserSessionAsrProgressCallback",
     "OpenAIAsrConfig",
     "OpenAIAsrTranscriber",
     "OpenAIAudioTranscriptionsClient",
@@ -243,6 +277,13 @@ __all__ = [
     "PhaseOneResearchResult",
     "ResearchReportOutputDestination",
     "ResearchReportOutputSettings",
+    "QuickReportProgressEvent",
+    "QuickReportProgressCallback",
+    "QuickReportStepStatus",
+    "QuickVideoReportInput",
+    "QuickVideoReportResult",
+    "QuickVideoReportBatchItem",
+    "QuickVideoReportBatchResult",
     "SpeechToTextClient",
     "TranscriptUnavailableYouTubeClient",
     "WrittenResearchReport",
@@ -252,6 +293,7 @@ __all__ = [
     "build_research_analysis_client",
     "build_vlm_client",
     "build_research_report_filename",
+    "build_quick_video_report_filename",
     "build_local_audio_research_source",
     "build_transcript_json_research_source",
     "build_pdf_research_source",
@@ -266,11 +308,19 @@ __all__ = [
     "load_asr_transcription_result",
     "pdf_to_markdown",
     "render_research_report",
+    "parse_research_report_markdown",
+    "StatisticalReportResult",
+    "StockConsensus",
+    "build_stock_consensus",
+    "generate_statistical_report",
     "render_video_research_report",
     "render_investment_brief",
     "resolve_research_report_output_destinations",
     "run_browser_session_asr_pipeline",
+    "run_existing_media_asr_pipeline",
     "run_phase_one_research_source_analysis",
+    "run_quick_video_research_report",
+    "run_quick_video_report_batch",
     "run_video_research_report_pipeline",
     "select_downloadable_media_request",
     "select_stream_manifest",

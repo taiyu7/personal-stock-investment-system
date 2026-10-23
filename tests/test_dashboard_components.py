@@ -10,7 +10,9 @@ from apps.dashboard.views.research_source_analysis import (
     INPUT_KIND_OPTIONS,
     TRANSCRIPTION_PROVIDER_OPTIONS,
     _is_available_status,
+    _existing_media_candidates,
     _option_value,
+    _safe_media_error,
     build_browser_asr_input,
 )
 
@@ -42,9 +44,9 @@ def test_recent_rows_returns_empty_when_required_price_columns_are_missing():
     assert rows.empty
 
 
-def test_research_source_analysis_is_available_from_sidebar_navigation():
-    assert "研究來源分析" in SIDEBAR_PAGES
-    assert SIDEBAR_PAGES.index("研究來源分析") == 1
+def test_video_summary_report_is_available_from_sidebar_navigation():
+    assert "影音生成摘要報告" in SIDEBAR_PAGES
+    assert SIDEBAR_PAGES.index("影音生成摘要報告") == 1
 
 
 def test_sidebar_uses_session_page_for_active_button(monkeypatch):
@@ -66,18 +68,18 @@ def test_sidebar_uses_session_page_for_active_button(monkeypatch):
 
     def fake_button(label, *, key, type, width, on_click, args):
         rendered_buttons.append((label, type))
-        if label == "研究來源分析":
+        if label == "影音生成摘要報告":
             on_click(*args)
         return False
 
     monkeypatch.setattr(layout.st, "sidebar", FakeSidebar())
     monkeypatch.setattr(layout.st, "button", fake_button)
-    monkeypatch.setattr(layout.st, "session_state", FakeSessionState(current_page="研究來源分析"))
+    monkeypatch.setattr(layout.st, "session_state", FakeSessionState(current_page="影音生成摘要報告"))
 
     selected_page = layout.render_sidebar("市場交易儀表板")
 
-    assert selected_page == "研究來源分析"
-    assert ("研究來源分析", "primary") in rendered_buttons
+    assert selected_page == "影音生成摘要報告"
+    assert ("影音生成摘要報告", "primary") in rendered_buttons
     assert ("市場交易儀表板", "secondary") in rendered_buttons
 
 
@@ -143,3 +145,20 @@ def test_research_source_analysis_builds_browser_asr_input_from_ui_values():
     assert source_input.openai_transcription_prompt == "台股詞彙：台積電、CPO、瀚荃。"
     assert source_input.openai_chunk_length_seconds == 180.0
     assert source_input.language == "zh"
+
+
+def test_research_source_analysis_redacts_sensitive_media_diagnostics():
+    error = _safe_media_error("ERROR cookie=secret https://example.test/watch?token=secret")
+
+    assert "secret" not in error
+    assert "cookie=[redacted]" in error
+    assert "?[redacted]" in error
+
+
+def test_research_source_analysis_finds_only_nonempty_matching_media_files(tmp_path):
+    matching_media = tmp_path / "1008-節目.mkv"
+    matching_media.write_bytes(b"media")
+    (tmp_path / "1008-節目.webm").write_bytes(b"")
+    (tmp_path / "other.mkv").write_bytes(b"media")
+
+    assert _existing_media_candidates("1008-節目", tmp_path) == (matching_media.resolve(),)

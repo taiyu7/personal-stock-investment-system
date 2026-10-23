@@ -414,6 +414,7 @@ def _technical_note_schema() -> dict[str, object]:
     return _object_schema(
         {
             "stock": {"type": "string"},
+            "company": {"type": "string"},
             "signal": {"type": "string"},
             "chart_context": {"type": "string"},
             "rationale": {"type": "string"},
@@ -554,6 +555,7 @@ def _technical_note(source: ResearchSource, item: object) -> TechnicalAnalysisNo
     values = _dict(item)
     return TechnicalAnalysisNote(
         stock=_string(values.get("stock")),
+        company=_string(values.get("company")),
         signal=_string(values.get("signal")),
         chart_context=_string(values.get("chart_context")),
         rationale=_string(values.get("rationale")),
@@ -695,7 +697,7 @@ def _technical_analysis_policy() -> str:
         "技術面、價量、型態、支撐壓力、均線、指標或老師自創術語，就必須同步建立 technical_notes。"
         f"觸發詞例子包含：{examples}；這只是範例清單，不是完整固定清單。"
         "遇到來賓自己的技術詞彙也要保留原詞，並在 signal 或 rationale 說明其上下文。"
-        "technical_notes.stock 必須對應 stock_opinions.stock 或加權指數；資料不足仍要列出，missing_data 填待補 K 線、量能、均線或圖面資料。"
+        "technical_notes.stock 與 technical_notes.company 必須對應 stock_opinions 的股票代號與公司名稱，或填加權指數；資料不足仍要列出，missing_data 填待補 K 線、量能、均線或圖面資料。"
     )
 
 

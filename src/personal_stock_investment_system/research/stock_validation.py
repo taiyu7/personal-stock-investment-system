@@ -193,8 +193,8 @@ class TaiwanStockMentionVerifier:
         company_by_code = self._by_code.get(raw_code)
         companies_by_name = self._by_name.get(normalized_name, []) if normalized_name else []
 
-        if company_by_code is not None:
-            if not normalized_name or normalized_name in company_by_code.names():
+        if company_by_code is not None and companies_by_name:
+            if company_by_code in companies_by_name:
                 return _result(
                     raw_code,
                     raw_name,
@@ -203,14 +203,53 @@ class TaiwanStockMentionVerifier:
                     evidence=f"官方公司清單確認 {company_by_code.code} 為 {company_by_code.name}。",
                     confidence="高",
                 )
+            return _identity_conflict_result(
+                raw_code,
+                raw_name,
+                company_by_code=company_by_code,
+                company_by_name=companies_by_name[0],
+            )
+
+        if company_by_code is not None:
+            if not normalized_name:
+                return _result(
+                    raw_code,
+                    raw_name,
+                    company_by_code,
+                    status="已查證",
+                    evidence=f"官方公司清單確認 {company_by_code.code} 為 {company_by_code.name}。",
+                    confidence="高",
+                )
+            fuzzy_name_matches = self._fuzzy_name_matches(normalized_name)
+            fuzzy_other_codes = tuple(item for item in fuzzy_name_matches if item.code != company_by_code.code)
+            if len(fuzzy_other_codes) == 1:
+                return _identity_conflict_result(
+                    raw_code,
+                    raw_name,
+                    company_by_code=company_by_code,
+                    company_by_name=fuzzy_other_codes[0],
+                )
+            if len(fuzzy_other_codes) > 1:
+                candidates = "、".join(f"{item.code} {item.name}" for item in fuzzy_other_codes)
+                return StockMentionVerification(
+                    raw_code=raw_code,
+                    raw_name=raw_name,
+                    status="待查證",
+                    evidence=(
+                        f"代號 {raw_code} 對應 {company_by_code.name}；"
+                        f"名稱 {raw_name} 另有多筆近似候選：{candidates}。"
+                    ),
+                    source_url=company_by_code.source_url,
+                    confidence="低",
+                )
             return _result(
                 raw_code,
                 raw_name,
                 company_by_code,
-                status="衝突",
+                status="已修正",
                 evidence=(
-                    f"代號 {raw_code} 的官方公司名稱為 {company_by_code.name}，"
-                    f"與來源名稱 {raw_name or '未提供'} 不一致。"
+                    f"代號 {raw_code} 唯一對應官方公司名稱 {company_by_code.name}，"
+                    f"已將來源名稱 {raw_name} 修正為 {company_by_code.name}。"
                 ),
                 confidence="高",
             )
@@ -245,6 +284,28 @@ class TaiwanStockMentionVerifier:
                 confidence="低",
             )
 
+        if not raw_code and normalized_name:
+            fuzzy_name_matches = self._fuzzy_name_matches(normalized_name)
+            if len(fuzzy_name_matches) == 1:
+                candidate = fuzzy_name_matches[0]
+                return _result(
+                    raw_code,
+                    raw_name,
+                    candidate,
+                    status="已修正",
+                    evidence=f"已將來源名稱 {raw_name} 修正為官方公司名稱 {candidate.name}。",
+                    confidence="中",
+                )
+            if len(fuzzy_name_matches) > 1:
+                candidates = "、".join(f"{item.code} {item.name}" for item in fuzzy_name_matches)
+                return StockMentionVerification(
+                    raw_code=raw_code,
+                    raw_name=raw_name,
+                    status="待查證",
+                    evidence=f"公司名稱 {raw_name} 有多筆近似候選：{candidates}。",
+                    confidence="低",
+                )
+
         return StockMentionVerification(
             raw_code=raw_code,
             raw_name=raw_name,
@@ -253,12 +314,21 @@ class TaiwanStockMentionVerifier:
             confidence="低",
         )
 
+    def _fuzzy_name_matches(self, normalized_name: str) -> tuple[TaiwanListedCompany, ...]:
+        if len(normalized_name) < 2:
+            return ()
+        matches: dict[str, TaiwanListedCompany] = {}
+        for company in self.directory.companies:
+            if any(_edit_distance_at_most_one(normalized_name, candidate) for candidate in company.names()):
+                matches[company.code] = company
+        return tuple(matches.values())
+
 
 def verify_research_report_stock_mentions(
     report: ResearchReport,
     directory: TaiwanStockDirectory,
 ) -> ResearchReport:
-    """Attach deterministic stock identity checks and normalize only verified names."""
+    """Attach deterministic stock checks and apply only safe identity corrections."""
 
     verifier = TaiwanStockMentionVerifier(directory)
     mentions = _report_mentions(report)
@@ -267,6 +337,17 @@ def verify_research_report_stock_mentions(
     issues = tuple(
         _verification_issue(result, references[(code, name)], directory.collected_at)
         for (code, name), result in results.items()
+    )
+    related_name_results = {
+        name: verifier.verify("", name)
+        for item in report.stock_relations
+        for name in item.related_companies
+        if name.strip()
+    }
+    related_name_issues = tuple(
+        _verification_issue(result, None, directory.collected_at)
+        for result in related_name_results.values()
+        if result.status == "已修正"
     )
     retained_issues = tuple(
         issue for issue in report.verification_issues if not _is_stock_identity_issue(issue)
@@ -287,6 +368,9 @@ def verify_research_report_stock_mentions(
                 item,
                 stock=_verified_code(results.get((item.stock, item.company)), item.stock),
                 company=_verified_name(results.get((item.stock, item.company)), item.company),
+                related_companies=tuple(
+                    _verified_name(related_name_results.get(name), name) for name in item.related_companies
+                ),
             )
             for item in report.stock_relations
         ),
@@ -298,7 +382,7 @@ def verify_research_report_stock_mentions(
             )
             for item in report.company_profiles
         ),
-        verification_issues=retained_issues + issues,
+        verification_issues=retained_issues + issues + related_name_issues,
     )
 
 
@@ -373,6 +457,53 @@ def _normalize_name(value: str) -> str:
     return normalized.casefold()
 
 
+def _edit_distance_at_most_one(left: str, right: str) -> bool:
+    if left == right:
+        return True
+    if abs(len(left) - len(right)) > 1:
+        return False
+    if len(left) > len(right):
+        left, right = right, left
+    if len(left) == len(right):
+        return sum(first != second for first, second in zip(left, right, strict=True)) <= 1
+    left_index = 0
+    right_index = 0
+    differences = 0
+    while left_index < len(left) and right_index < len(right):
+        if left[left_index] == right[right_index]:
+            left_index += 1
+            right_index += 1
+            continue
+        differences += 1
+        if differences > 1:
+            return False
+        right_index += 1
+    return True
+
+
+def _identity_conflict_result(
+    raw_code: str,
+    raw_name: str,
+    *,
+    company_by_code: TaiwanListedCompany,
+    company_by_name: TaiwanListedCompany,
+) -> StockMentionVerification:
+    return StockMentionVerification(
+        raw_code=raw_code,
+        raw_name=raw_name,
+        status="衝突",
+        canonical_code=company_by_name.code,
+        canonical_name=company_by_name.name,
+        market=company_by_name.market,
+        evidence=(
+            f"代號 {raw_code} 對應 {company_by_code.name}；"
+            f"名稱 {raw_name} 則對應或近似 {company_by_name.code} {company_by_name.name}，需人工確認。"
+        ),
+        source_url=company_by_name.source_url or company_by_code.source_url,
+        confidence="高",
+    )
+
+
 def _result(
     raw_code: str,
     raw_name: str,
@@ -400,7 +531,7 @@ def _report_mentions(report: ResearchReport) -> tuple[tuple[str, str, SourceRefe
         *((item.stock, item.company, item.reference) for item in report.stock_opinions),
         *((item.stock, item.company, item.reference) for item in report.stock_relations),
         *((item.stock, item.company, item.reference) for item in report.company_profiles),
-        *((item.stock, "", item.reference) for item in report.technical_notes),
+        *((item.stock, item.company, item.reference) for item in report.technical_notes),
     )
     mentions: dict[str, tuple[str, str, SourceReference | None]] = {}
     for code, name, reference in candidates:
@@ -440,13 +571,13 @@ def _verification_issue(
 
 
 def _verified_name(result: StockMentionVerification | None, original: str) -> str:
-    if result is not None and result.status == "已查證" and result.canonical_name:
+    if result is not None and result.status in {"已查證", "已修正"} and result.canonical_name:
         return result.canonical_name
     return original
 
 
 def _verified_code(result: StockMentionVerification | None, original: str) -> str:
-    if result is not None and result.status == "已查證" and result.canonical_code:
+    if result is not None and result.status in {"已查證", "已修正"} and result.canonical_code:
         return result.canonical_code
     return original
 

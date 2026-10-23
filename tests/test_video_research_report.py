@@ -59,6 +59,7 @@ def _pipeline_input(tmp_path: Path) -> VideoResearchReportInput:
         technical_notes=(
             TechnicalAnalysisNote(
                 stock="2330",
+                company="台積電",
                 signal="突破壓力",
                 chart_context="需搭配截圖確認",
                 rationale="講者指向 K 線與成交量",

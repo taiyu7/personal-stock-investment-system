@@ -233,6 +233,7 @@ def _technical_notes(
             notes.append(
                 TechnicalAnalysisNote(
                     stock=mention.stock,
+                    company=mention.company,
                     signal="、".join(signals),
                     chart_context=_chart_context(chunk.text),
                     rationale=_opinion_text(chunk.text),
