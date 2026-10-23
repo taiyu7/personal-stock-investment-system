@@ -21,6 +21,7 @@ class CaptionFetchResult:
     language: str = ""
     error: str = ""
     track_found: bool = False
+    converted_to_traditional: bool = False
 
 
 CaptionRunner = Callable[..., subprocess.CompletedProcess[str]]
@@ -41,46 +42,86 @@ def fetch_youtube_captions(
         return CaptionFetchResult(error="不是 YouTube 影片網址。")
     work_dir.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="psis-captions-", dir=work_dir) as directory:
-        command = [
-            "yt-dlp", "--ignore-config", "--no-playlist", "--skip-download", "--write-subs", "--write-auto-subs",
-            "--sub-langs", "zh-TW,zh-Hant,zh-Hans,zh,en", "--sub-format", "vtt",
-            "--output", str(Path(directory) / "caption.%(ext)s"),
-        ]
+        common = ["yt-dlp", "--ignore-config", "--no-playlist", "--skip-download"]
         if cookies_from_browser:
-            command.extend(("--cookies-from-browser", cookies_from_browser))
+            common.extend(("--cookies-from-browser", cookies_from_browser))
         if remote_components:
-            command.extend(("--remote-components", remote_components))
-        command.append(video_url)
+            common.extend(("--remote-components", remote_components))
         try:
-            completed = runner(command, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=90)
+            metadata = runner(
+                [*common, "--dump-single-json", video_url],
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
+            )
         except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as error:
             return CaptionFetchResult(error=f"字幕取得失敗：{type(error).__name__}")
-        if completed.returncode:
-            return CaptionFetchResult(error=_caption_failure_reason(completed.stderr or completed.stdout))
-        candidates = sorted(Path(directory).glob("caption.*.vtt"), key=_caption_priority)
-        for path in candidates:
-            segments = parse_webvtt(path.read_text(encoding="utf-8-sig"))
-            if segments:
-                return CaptionFetchResult(segments, path.name.removeprefix("caption.").removesuffix(".vtt"), track_found=True)
-        return CaptionFetchResult(error="找不到可讀取的中文或英文 YouTube 字幕，將使用音訊轉錄。")
+        if metadata.returncode:
+            return CaptionFetchResult(error=_caption_failure_reason(metadata.stderr or metadata.stdout))
+        try:
+            languages = _select_caption_languages(json.loads(metadata.stdout))
+        except (TypeError, ValueError):
+            return CaptionFetchResult(error="YouTube 字幕清單無法解析。")
+        if not languages:
+            return CaptionFetchResult(error="找不到可讀取的 zh-TW 或簡體中文字幕。")
+        failures = []
+        for language in languages:
+            command = [
+                *common, "--write-subs", "--write-auto-subs", "--sub-langs", language,
+                "--sub-format", "vtt", "--output", str(Path(directory) / "caption.%(ext)s"), video_url,
+            ]
+            try:
+                completed = runner(command, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=90)
+            except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as error:
+                failures.append(f"{language} 字幕取得失敗：{type(error).__name__}")
+                continue
+            for path in Path(directory).glob(f"caption.{language}.vtt"):
+                segments = parse_webvtt(path.read_text(encoding="utf-8-sig"))
+                if segments:
+                    return _caption_result(segments, language)
+            reason = _caption_failure_reason(completed.stderr or completed.stdout) if completed.returncode else "字幕沒有可讀內容。"
+            failures.append(f"{language}：{reason}")
+        return CaptionFetchResult(error="；".join(failures), track_found=True)
+
+
+_CAPTION_LANGUAGES = ("zh-TW", "zh-Hans", "zh-CN")
+
+
+def _select_caption_languages(info: object) -> tuple[str, ...]:
+    if not isinstance(info, dict):
+        return ()
+    manual = info.get("subtitles") or {}
+    automatic = info.get("automatic_captions") or {}
+    if not isinstance(manual, dict) or not isinstance(automatic, dict):
+        return ()
+    return tuple(language for language in _CAPTION_LANGUAGES if manual.get(language) or automatic.get(language))
+
+
+def _caption_result(segments: tuple[AsrTranscriptSegment, ...], language: str) -> CaptionFetchResult:
+    if language == "zh-TW":
+        return CaptionFetchResult(segments, language, track_found=True)
+    try:
+        from opencc import OpenCC
+
+        converter = OpenCC("s2tw.json")
+        converted = tuple(
+            AsrTranscriptSegment(converter.convert(segment.text), segment.start_seconds, segment.end_seconds)
+            for segment in segments
+        )
+    except (ImportError, RuntimeError) as error:
+        return CaptionFetchResult(error=f"{language} 字幕已取得，但簡轉繁失敗（{type(error).__name__}）。", track_found=True)
+    return CaptionFetchResult(converted, language, track_found=True, converted_to_traditional=True)
 
 
 def _caption_failure_reason(output: str) -> str:
     detail = output.casefold()
     if "failed to resolve" in detail or "name resolution" in detail:
-        return "字幕檢查無法連線到 YouTube（DNS 解析失敗），將使用音訊轉錄。"
+        return "字幕檢查無法連線到 YouTube（DNS 解析失敗）。"
     if "sign in" in detail or "login" in detail or "cookies" in detail:
-        return "字幕檢查需要登入或有效的瀏覽器登入狀態，將使用音訊轉錄。"
+        return "字幕檢查需要登入或有效的瀏覽器登入狀態。"
     if "403" in detail or "forbidden" in detail:
-        return "YouTube 拒絕下載字幕（403），將使用音訊轉錄。"
+        return "YouTube 拒絕下載字幕（403）。"
     if "429" in detail or "too many requests" in detail:
-        return "YouTube 暫時限制字幕請求（429），將使用音訊轉錄。"
-    return "YouTube 字幕下載失敗；請檢查容器中的 yt-dlp 與網路連線。將使用音訊轉錄。"
-
-
-def _caption_priority(path: Path) -> int:
-    language = path.name.removeprefix("caption.").removesuffix(".vtt")
-    return {"zh-TW": 0, "zh-Hant": 1, "zh-Hans": 2, "zh": 3, "en": 4}.get(language, 5)
+        return "YouTube 暫時限制字幕請求（429）。"
+    return "YouTube 字幕下載失敗；請檢查容器中的 yt-dlp 與網路連線。"
 
 
 def fetch_youtube_captions_in_browser(video_url: str, config, *, driver_factory=None) -> CaptionFetchResult:
@@ -102,13 +143,17 @@ def fetch_youtube_captions_in_browser(video_url: str, config, *, driver_factory=
             return response?.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
             """
         )
-        if not isinstance(tracks, list) or not tracks:
-            return CaptionFetchResult(error="瀏覽器頁面未提供可讀取的字幕軌。")
-        tracks = sorted(
-            (track for track in tracks if isinstance(track, dict) and track.get("baseUrl")),
-            key=lambda track: (track.get("kind") == "asr", _language_priority(str(track.get("languageCode", "")))),
-        )
-        for track in tracks:
+        chinese_tracks = [
+            track for track in tracks
+            if isinstance(track, dict) and track.get("languageCode") in _CAPTION_LANGUAGES
+        ] if isinstance(tracks, list) else []
+        if not chinese_tracks:
+            return CaptionFetchResult(error="瀏覽器頁面未提供 zh-TW 或簡體中文字幕軌。")
+        for track in sorted(chinese_tracks, key=lambda value: (
+            _CAPTION_LANGUAGES.index(value["languageCode"]), value.get("kind") == "asr",
+        )):
+            if not track.get("baseUrl"):
+                continue
             content = driver.execute_async_script(
                 """
                 const base = arguments[0], done = arguments[arguments.length - 1];
@@ -121,16 +166,12 @@ def fetch_youtube_captions_in_browser(video_url: str, config, *, driver_factory=
             )
             segments = parse_webvtt(content) if isinstance(content, str) else ()
             if segments:
-                return CaptionFetchResult(segments, str(track.get("languageCode", "")), track_found=True)
-        return CaptionFetchResult(error="瀏覽器找到了字幕軌，但字幕內容無法讀取。", track_found=True)
+                return _caption_result(segments, str(track["languageCode"]))
+        return CaptionFetchResult(error="瀏覽器找到了中文字幕軌，但字幕內容無法讀取。", track_found=True)
     except Exception as error:  # noqa: BLE001 - retain yt-dlp diagnostic and fall back to ASR.
         return CaptionFetchResult(error=f"瀏覽器字幕讀取失敗（{type(error).__name__}）。")
     finally:
         driver.quit()
-
-
-def _language_priority(language: str) -> int:
-    return {"zh-TW": 0, "zh-Hant": 1, "zh-Hans": 2, "zh": 3, "en": 4}.get(language, 5)
 
 
 _TIMING = re.compile(r"^(\d{2}:)?\d{2}:\d{2}\.\d{3}\s+-->\s+(\d{2}:)?\d{2}:\d{2}\.\d{3}")
@@ -163,6 +204,7 @@ def save_caption_transcript(result: CaptionFetchResult, output_path: Path) -> As
     output_path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "source": "youtube_captions", "language": result.language,
+        "converted_to_traditional": result.converted_to_traditional,
         "segments": [
             {"start": segment.start_seconds, "end": segment.end_seconds, "text": segment.text}
             for segment in result.segments
@@ -171,5 +213,9 @@ def save_caption_transcript(result: CaptionFetchResult, output_path: Path) -> As
     output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return AsrTranscriptionResult(
         segments=result.segments, transcript_path=output_path,
-        status_message=f"已使用 YouTube 現成字幕（{result.language}），未執行音訊轉錄。",
+        status_message=(
+            f"已使用 YouTube 現成字幕（{result.language}→繁體中文），未執行音訊轉錄。"
+            if result.converted_to_traditional else
+            f"已使用 YouTube 現成字幕（{result.language}），未執行音訊轉錄。"
+        ),
     )
