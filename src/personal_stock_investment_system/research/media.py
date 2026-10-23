@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Callable, Iterable, Literal, Protocol, Sequence
 from urllib.parse import urlparse
@@ -23,6 +23,7 @@ class DiscoveredMediaRequest:
     method: str = ""
     headers: tuple[tuple[str, str], ...] = ()
     download_url: str = ""
+    publisher: str = ""
 
     def is_stream_manifest(self) -> bool:
         return is_stream_manifest_url(self.url) or "mpegurl" in self.content_type.lower()
@@ -177,7 +178,11 @@ class SeleniumBrowserMediaDiscovery:
             if self.config.try_start_playback:
                 try_start_browser_media_playback(driver)
                 self.sleeper(self.config.playback_wait_seconds)
-            return extract_media_requests_from_chrome_performance_logs(driver.get_log("performance"))
+            requests = extract_media_requests_from_chrome_performance_logs(driver.get_log("performance"))
+            publisher = _extract_youtube_channel_name(driver)
+            if publisher:
+                return tuple(replace(item, publisher=publisher) for item in requests)
+            return requests
         finally:
             if self.config.quit_driver:
                 driver.quit()
@@ -376,6 +381,20 @@ def try_start_browser_media_playback(driver: BrowserPerformanceLogDriver) -> Non
         }
         """
     )
+
+
+def _extract_youtube_channel_name(driver: BrowserPerformanceLogDriver) -> str:
+    try:
+        value = driver.execute_script(
+            """
+            const channel = document.querySelector('ytd-channel-name #text');
+            if (channel) return (channel.textContent || '').trim();
+            return '';
+            """
+        )
+    except Exception:  # noqa: BLE001 - channel metadata is optional and must not block media capture.
+        return ""
+    return str(value).strip() if value else ""
 
 
 def is_stream_manifest_url(url: str) -> bool:

@@ -31,11 +31,16 @@ from personal_stock_investment_system.research.media import (
     YtDlpMediaDownloader,
     safe_filename,
 )
-from personal_stock_investment_system.research.sources import ResearchSourceImportResult, SourceImportStatus
+from personal_stock_investment_system.research.sources import ResearchSource, ResearchSourceImportResult, SourceImportStatus
+from personal_stock_investment_system.research.youtube_captions import (
+    CaptionFetchResult, fetch_youtube_captions, fetch_youtube_captions_in_browser, save_caption_transcript,
+)
+from personal_stock_investment_system.research.youtube import parse_youtube_video_id
 
 DEFAULT_OPENVINO_TRANSCRIPT_OUTPUT_DIR = Path("data/processed/asr-transcripts/openvino")
 DEFAULT_OPENAI_TRANSCRIPT_OUTPUT_DIR = Path("data/processed/asr-transcripts/openai")
 BrowserSessionAsrProgressCallback = Callable[[str, str, str], None]
+CaptionFetcher = Callable[..., CaptionFetchResult]
 
 
 @dataclass(frozen=True)
@@ -71,6 +76,7 @@ class BrowserSessionAsrResult:
     media_result: MediaAcquisitionResult
     transcription: AsrTranscriptionResult | None = None
     source_import_result: ResearchSourceImportResult | None = None
+    caption_diagnostic: str = ""
 
     @property
     def status(self) -> SourceImportStatus:
@@ -92,8 +98,76 @@ def run_browser_session_asr_pipeline(
     preprocessor: AudioPreprocessor | None = None,
     speech_to_text: SpeechToTextClient | None = None,
     on_progress: BrowserSessionAsrProgressCallback | None = None,
+    caption_fetcher: CaptionFetcher = fetch_youtube_captions,
+    browser_caption_fetcher: CaptionFetcher = fetch_youtube_captions_in_browser,
 ) -> BrowserSessionAsrResult:
     output_stem = source_input.output_stem or safe_filename(source_input.title or source_input.page_url)
+    try:
+        parse_youtube_video_id(source_input.page_url)
+        is_youtube = True
+    except ValueError:
+        is_youtube = False
+    if is_youtube and source_input.asr_provider not in {"", "none"}:
+        _emit_progress(on_progress, "captions", "running", "正在檢查 YouTube 現成字幕。")
+        try:
+            captions = caption_fetcher(
+                source_input.page_url,
+                cookies_from_browser=source_input.ytdlp_cookies_from_browser,
+                remote_components=source_input.ytdlp_remote_components,
+                work_dir=source_input.transcript_output_dir,
+            )
+        except Exception as error:  # noqa: BLE001 - caption failure must not block the existing ASR fallback.
+            captions = CaptionFetchResult(error=f"字幕檢查失敗（{type(error).__name__}），改用音訊轉錄。")
+        if not captions.segments:
+            first_error = captions.error
+            try:
+                browser_captions = browser_caption_fetcher(source_input.page_url, _browser_config(source_input))
+            except Exception as error:  # noqa: BLE001 - continue to ASR when browser subtitles also fail.
+                browser_captions = CaptionFetchResult(error=f"瀏覽器字幕檢查失敗（{type(error).__name__}）。")
+            captions = browser_captions if browser_captions.segments else CaptionFetchResult(
+                error=f"{first_error} {browser_captions.error}".strip(),
+                track_found=captions.track_found or browser_captions.track_found,
+            )
+        if captions.segments:
+            transcript = save_caption_transcript(
+                captions, source_input.transcript_output_dir / f"{safe_filename(output_stem)}-captions.json",
+            )
+            _emit_progress(on_progress, "captions", "success", transcript.status_message)
+            source = ResearchSource(
+                source_type="youtube_public", title=source_input.title or output_stem,
+                source_url=source_input.page_url,
+                raw_text="\n".join(f"[{segment.display_timestamp()}] {segment.text}" for segment in captions.segments),
+                source_locator=source_input.page_url,
+                notes=f"transcript_source=youtube_captions;language={captions.language}",
+            )
+            return BrowserSessionAsrResult(
+                media_result=MediaAcquisitionResult(
+                    status="available", source_identifier=source_input.page_url,
+                    status_message="已使用 YouTube 現成字幕；無須下載影片音訊。",
+                ),
+                transcription=transcript,
+                source_import_result=ResearchSourceImportResult(
+                    source=source, status="available", source_identifier=source_input.page_url,
+                    status_message=transcript.status_message,
+                ),
+            )
+        caption_diagnostic = captions.error or "未取得現成字幕，改用音訊轉錄。"
+        if captions.track_found:
+            caption_diagnostic = (
+                f"{caption_diagnostic} 已確認影片有字幕軌，但目前無法讀取字幕內容；"
+                "為避免意外下載長影片並執行 ASR，已停止處理。請稍後重試或在進階模式貼上逐字稿。"
+            )
+            _emit_progress(on_progress, "captions", "failed", caption_diagnostic)
+            return BrowserSessionAsrResult(
+                media_result=MediaAcquisitionResult(
+                    status="transcript_unavailable", source_identifier=source_input.page_url,
+                    status_message="影片有字幕，但目前無法讀取；未啟動音訊轉錄。",
+                ),
+                caption_diagnostic=caption_diagnostic,
+            )
+        _emit_progress(on_progress, "captions", "failed", caption_diagnostic)
+    else:
+        caption_diagnostic = ""
     acquirer = BrowserSessionMediaAcquirer(
         discovery=discovery or _default_browser_discovery(source_input),
         downloader=downloader or _default_downloader(source_input),
@@ -105,15 +179,16 @@ def run_browser_session_asr_pipeline(
     media_result = acquirer.acquire_for_asr(source_input.page_url, output_stem=output_stem)
     if not media_result.is_available() or media_result.artifact is None:
         _emit_progress(on_progress, "media", "failed", media_result.status_message)
-        return BrowserSessionAsrResult(media_result=media_result)
+        return BrowserSessionAsrResult(media_result=media_result, caption_diagnostic=caption_diagnostic)
     _emit_progress(on_progress, "media", "success", media_result.status_message)
 
-    return _transcribe_media_result(
+    result = _transcribe_media_result(
         source_input,
         media_result,
         speech_to_text=speech_to_text,
         on_progress=on_progress,
     )
+    return replace(result, caption_diagnostic=caption_diagnostic)
 
 
 def run_existing_media_asr_pipeline(
@@ -257,16 +332,18 @@ class _FixedTranscriptionClient:
 
 
 def _default_browser_discovery(source_input: BrowserSessionAsrInput) -> SeleniumBrowserMediaDiscovery:
-    return SeleniumBrowserMediaDiscovery(
-        SeleniumBrowserSessionConfig(
-            chrome_user_data_dir=source_input.chrome_user_data_dir,
-            chrome_profile_directory=source_input.chrome_profile_directory,
-            chrome_binary_path=source_input.chrome_binary_path,
-            chromedriver_path=source_input.chromedriver_path,
-            headless=source_input.headless,
-            settle_seconds=source_input.settle_seconds,
-            playback_wait_seconds=source_input.playback_wait_seconds,
-        )
+    return SeleniumBrowserMediaDiscovery(_browser_config(source_input))
+
+
+def _browser_config(source_input: BrowserSessionAsrInput) -> SeleniumBrowserSessionConfig:
+    return SeleniumBrowserSessionConfig(
+        chrome_user_data_dir=source_input.chrome_user_data_dir,
+        chrome_profile_directory=source_input.chrome_profile_directory,
+        chrome_binary_path=source_input.chrome_binary_path,
+        chromedriver_path=source_input.chromedriver_path,
+        headless=source_input.headless,
+        settle_seconds=source_input.settle_seconds,
+        playback_wait_seconds=source_input.playback_wait_seconds,
     )
 
 

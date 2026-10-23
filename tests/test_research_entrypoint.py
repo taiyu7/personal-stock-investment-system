@@ -98,6 +98,8 @@ def test_pdf_entrypoint_completes_pdf_to_markdown_preprocessing(tmp_path):
 
 
 def test_youtube_entrypoint_shows_transcript_unavailable_fallback():
+    from personal_stock_investment_system.research.entrypoint import TranscriptUnavailableYouTubeClient
+
     result = run_phase_one_research_source_analysis(
         PhaseOneResearchInput(
             input_kind="youtube_public",
@@ -105,6 +107,7 @@ def test_youtube_entrypoint_shows_transcript_unavailable_fallback():
             youtube_url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
         ),
         output_settings=ResearchReportOutputSettings.no_local_files(),
+        youtube_client=TranscriptUnavailableYouTubeClient(),
         report_date=date(2026, 8, 13),
     )
 
@@ -115,6 +118,27 @@ def test_youtube_entrypoint_shows_transcript_unavailable_fallback():
     assert "YouTube 逐字稿狀態：transcript_unavailable" in result.statuses
     assert "未取得公開逐字稿" in "\n".join(result.statuses)
     assert "## 一句話摘要\n\n未判定" in result.markdown
+
+
+def test_youtube_entrypoint_uses_available_captions(monkeypatch):
+    from personal_stock_investment_system.research.asr import AsrTranscriptSegment
+    from personal_stock_investment_system.research.youtube_captions import CaptionFetchResult
+    import personal_stock_investment_system.research.youtube_captions as captions_module
+
+    monkeypatch.setattr(
+        captions_module, "fetch_youtube_captions",
+        lambda url: CaptionFetchResult((AsrTranscriptSegment("2330 台積電", 15.0, 18.0),), "zh-TW"),
+    )
+    result = run_phase_one_research_source_analysis(
+        PhaseOneResearchInput(
+            input_kind="youtube_public", title="字幕影片",
+            youtube_url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        ),
+        output_settings=ResearchReportOutputSettings.no_local_files(),
+        report_date=date(2026, 8, 13),
+    )
+    assert result.import_result.status == "available"
+    assert "[00:15] 2330 台積電" in result.source.raw_text
 
 
 def test_entrypoint_can_write_to_selected_temp_destinations(tmp_path):

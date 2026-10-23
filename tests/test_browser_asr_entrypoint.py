@@ -10,6 +10,7 @@ from personal_stock_investment_system.research import (
     run_browser_session_asr_pipeline,
 )
 from personal_stock_investment_system.research.browser_asr import _format_cli_result
+from personal_stock_investment_system.research.youtube_captions import CaptionFetchResult
 
 
 class FakeDiscovery:
@@ -51,6 +52,89 @@ class FakeSpeechToText:
             segments=(AsrTranscriptSegment("投顧提到 2330 與 AI 需求", 1.0, 3.0),),
             transcript_path=audio_path.parent / "sample.json",
         )
+
+
+def test_existing_youtube_captions_skip_media_and_asr(tmp_path):
+    def unavailable_discovery(*args, **kwargs):
+        raise AssertionError("不應下載影片")
+
+    result = run_browser_session_asr_pipeline(
+        BrowserSessionAsrInput(
+            page_url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            title="測試影片", asr_provider="openai",
+            transcript_output_dir=tmp_path,
+        ),
+        discovery=unavailable_discovery,
+        speech_to_text=FakeSpeechToText(),
+        caption_fetcher=lambda *args, **kwargs: CaptionFetchResult(
+            (AsrTranscriptSegment("台積電 2330", 1.0, 2.0),), "zh-TW"
+        ),
+    )
+    assert result.is_available()
+    assert result.media_result.artifact is None
+    assert result.transcription is not None
+    assert result.transcription.transcript_path is not None
+    assert result.transcription.transcript_path.is_file()
+    assert "現成字幕" in result.transcription.status_message
+
+
+def test_unavailable_youtube_captions_fall_back_to_asr_with_reason(tmp_path):
+    class YoutubeDiscovery:
+        def discover(self, page_url):
+            return (DiscoveredMediaRequest("https://cdn.example.test/index.m3u8"),)
+
+    speech_to_text = FakeSpeechToText()
+    result = run_browser_session_asr_pipeline(
+        BrowserSessionAsrInput(
+            page_url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            output_stem="video-without-readable-captions", asr_provider="openai",
+            raw_output_dir=tmp_path / "raw", wav_output_dir=tmp_path / "wav",
+        ),
+        discovery=YoutubeDiscovery(), downloader=FakeDownloader(), preprocessor=FakePreprocessor(),
+        speech_to_text=speech_to_text,
+        caption_fetcher=lambda *args, **kwargs: CaptionFetchResult(error="字幕檢查 DNS 失敗"),
+        browser_caption_fetcher=lambda *args, **kwargs: CaptionFetchResult(error="瀏覽器也無法讀取"),
+    )
+    assert result.is_available()
+    assert "字幕檢查 DNS 失敗" in result.caption_diagnostic
+    assert speech_to_text.audio_path is not None
+
+
+def test_browser_caption_fallback_skips_asr(tmp_path):
+    result = run_browser_session_asr_pipeline(
+        BrowserSessionAsrInput(
+            page_url="https://www.youtube.com/watch?v=OH9SPy88MLk",
+            asr_provider="openai", transcript_output_dir=tmp_path,
+        ),
+        caption_fetcher=lambda *args, **kwargs: CaptionFetchResult(error="yt-dlp failed"),
+        browser_caption_fetcher=lambda *args, **kwargs: CaptionFetchResult(
+            (AsrTranscriptSegment("瀏覽器字幕", 12.0, 14.0),), "zh-TW"
+        ),
+    )
+    assert result.is_available()
+    assert result.media_result.artifact is None
+    assert result.caption_diagnostic == ""
+
+
+def test_unreadable_existing_caption_track_does_not_start_asr(tmp_path):
+    def unavailable_discovery(*args, **kwargs):
+        raise AssertionError("字幕軌已存在時不應下載影片")
+
+    result = run_browser_session_asr_pipeline(
+        BrowserSessionAsrInput(
+            page_url="https://www.youtube.com/watch?v=OH9SPy88MLk",
+            asr_provider="openai", transcript_output_dir=tmp_path,
+        ),
+        discovery=unavailable_discovery,
+        caption_fetcher=lambda *args, **kwargs: CaptionFetchResult(error="YouTube 429"),
+        browser_caption_fetcher=lambda *args, **kwargs: CaptionFetchResult(
+            error="瀏覽器找到字幕軌但回傳空內容", track_found=True,
+        ),
+    )
+    assert not result.is_available()
+    assert result.status == "transcript_unavailable"
+    assert "未啟動音訊轉錄" in result.media_result.status_message
+    assert "429" in result.caption_diagnostic
 
 
 def test_browser_session_asr_pipeline_can_stop_after_asr_ready_wav(tmp_path):

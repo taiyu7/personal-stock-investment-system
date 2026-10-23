@@ -73,6 +73,33 @@ class TranscriptUnavailableYouTubeClient:
         raise RuntimeError("transcript_unavailable")
 
 
+class AvailableYouTubeCaptionClient(TranscriptUnavailableYouTubeClient):
+    """Use existing public captions in the advanced YouTube URL import."""
+
+    def __init__(self, title: str = "", channel: str = "", published_date: str = "", browser_config=None) -> None:
+        super().__init__(title, channel, published_date)
+        self.browser_config = browser_config
+
+    def fetch_transcript(self, video_id: str) -> tuple[YouTubeTranscriptSegment, ...]:
+        from personal_stock_investment_system.research.youtube_captions import (
+            fetch_youtube_captions, fetch_youtube_captions_in_browser,
+        )
+
+        result = fetch_youtube_captions(f"https://www.youtube.com/watch?v={video_id}")
+        if not result.segments and self.browser_config is not None:
+            result = fetch_youtube_captions_in_browser(
+                f"https://www.youtube.com/watch?v={video_id}", self.browser_config,
+            )
+        if not result.segments:
+            raise RuntimeError(result.error or "transcript_unavailable")
+        return tuple(
+            YouTubeTranscriptSegment(segment.text, segment.start_seconds,
+                                     (segment.end_seconds - segment.start_seconds)
+                                     if segment.end_seconds is not None and segment.start_seconds is not None else None)
+            for segment in result.segments
+        )
+
+
 def run_phase_one_research_source_analysis(
     source_input: PhaseOneResearchInput,
     *,
@@ -212,7 +239,7 @@ def _build_source_import_result(
     if source_input.input_kind == "youtube_public":
         if not source_input.youtube_url.strip():
             raise ValueError("YouTube input requires youtube_url.")
-        client = youtube_client or TranscriptUnavailableYouTubeClient(
+        client = youtube_client or AvailableYouTubeCaptionClient(
             title=source_input.title,
             channel=source_input.publisher,
             published_date=source_input.published_date,

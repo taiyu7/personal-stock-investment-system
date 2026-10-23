@@ -491,10 +491,13 @@ def load_asr_transcription_result(transcript_path: Path | str) -> AsrTranscripti
             status="transcript_unavailable",
             status_message="逐字稿 JSON 未包含可用文字段落。",
         )
+    metadata = json.loads(resolved_transcript_path.read_text(encoding="utf-8"))
+    caption_language = str(metadata.get("language", "")).strip() if metadata.get("source") == "youtube_captions" else ""
     return AsrTranscriptionResult(
         segments=segments,
         transcript_path=resolved_transcript_path,
-        status_message="已讀取 ASR 逐字稿 JSON。",
+        status_message=(f"已讀取 YouTube 現成字幕（{caption_language or '語言未標記'}）。"
+                        if metadata.get("source") == "youtube_captions" else "已讀取 ASR 逐字稿 JSON。"),
     )
 
 
@@ -511,9 +514,10 @@ def build_transcript_json_research_source(
 ) -> ResearchSourceImportResult:
     resolved_transcript_path = _resolve_local_transcript_path(transcript_path)
     transcription = load_asr_transcription_result(resolved_transcript_path)
+    is_youtube_caption = transcription.status_message.startswith("已讀取 YouTube 現成字幕")
     raw_text = _raw_text(transcription.segments)
     source = ResearchSource(
-        source_type="local_audio",
+        source_type="youtube_public" if is_youtube_caption else "local_audio",
         title=title or resolved_transcript_path.stem,
         source_url=source_url,
         publisher=publisher,
@@ -522,8 +526,8 @@ def build_transcript_json_research_source(
         published_date=published_date,
         raw_text=raw_text,
         markdown_text=_transcript_json_markdown_text(resolved_transcript_path, transcription),
-        source_locator=f"transcript:{resolved_transcript_path}",
-        notes=_notes(notes, transcription),
+        source_locator=f"{'youtube_captions' if is_youtube_caption else 'transcript'}:{resolved_transcript_path}",
+        notes=_notes(f"{notes}; transcript_source=youtube_captions" if is_youtube_caption else notes, transcription),
     )
     return ResearchSourceImportResult(
         source=source,
