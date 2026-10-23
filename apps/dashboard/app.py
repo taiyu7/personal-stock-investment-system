@@ -12,8 +12,8 @@ from views.trade_concept import render_stock_concept_page
 from views.video_vlm_analysis import render_video_vlm_analysis_page
 
 
-APP_VERSION = "v0.10.0"
-APP_LAST_UPDATED = "2026-08-22"
+APP_VERSION = "v0.11.0"
+APP_LAST_UPDATED = "2026-10-24"
 DEFAULT_PAGE = "市場交易儀表板"
 
 st.set_page_config(page_title="個人股票投資系統", layout="wide")
