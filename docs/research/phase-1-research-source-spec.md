@@ -359,8 +359,8 @@ src/personal_stock_investment_system/research/
 
 - 使用真實投顧 PDF / 簡報 PDF 進行品質驗收。
 - OCR / 掃描 PDF 品質驗收。
-- 真實 YouTube CC / automatic captions adapter。現行 `TranscriptUnavailableYouTubeClient` 是安全 fallback，不會實際讀取 YouTube 字幕；即使影片有 CC，入口也會顯示 `transcript_unavailable`，除非未來接上真實 adapter 或使用者手動貼逐字稿。
-- YouTube 字幕語言選擇、人工 CC 與自動字幕狀態辨識。
+- 一般 YouTube source adapter `TranscriptUnavailableYouTubeClient` 仍是安全 fallback；快速影音報告另有字幕擷取流程，優先 zh-TW，其次簡體中文字幕並轉為繁體。
+- 快速流程的 YouTube 字幕擷取、429／網路錯誤處理與 ASR 後備路徑仍需真實影片端到端驗收。
 - PDF 文字品質與版面品質的真實樣本驗收。
 - 將研究工具輸出回寫或整理到 Obsidian 長期知識頁的流程。
 - CLI 入口；目前可操作入口是 Streamlit sidebar 頁面。
@@ -419,7 +419,7 @@ confidence
 6. 加入公開 YouTube metadata 匯入與 fallback 狀態。
 7. 實作輸出目的地設定，預設輸出到 Obsidian inbox 與桌面自選路徑。
 8. 加入 Streamlit sidebar 操作入口。
-9. 補真實 YouTube CC / automatic captions adapter，並把網路整合測試與純核心測試分開。
+9. 以真實 YouTube 影片驗收字幕語言優先序、字幕下載限制與 ASR 後備路徑，並把網路整合測試與純核心測試分開。
 10. 使用真實投顧 PDF / 簡報 PDF 驗收 PDF 轉 Markdown 品質。
 11. 再評估音訊轉錄與會員影片取得素材流程。
 

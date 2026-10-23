@@ -8,11 +8,11 @@
 
 ## 優先順序
 
-1. **真實公開 YouTube 字幕 adapter**
+1. **公開 YouTube 中文字幕 adapter（已接入快速報告流程）**
    - 讀取公開影片的人工 CC 與 automatic captions。
-   - 支援語言優先序：`zh-TW`、`zh-Hant`、`zh`、`en`。
-   - 清楚區分：有字幕、字幕停用、影片不可用、需要登入、網路失敗、語言不存在。
-   - 純核心測試使用 fake/mock；真實 YouTube 驗收放 integration，不混入一般單元測試。
+   - 語言順序為 `zh-TW`，再嘗試 `zh-Hans`／`zh-CN`；簡體結果先轉為繁體中文。
+   - 不讀取其他語言。沒有可用中文字幕或字幕請求失敗時，快速流程才改用 OpenAI 音訊轉錄。
+   - 純核心測試使用 fake/mock；YouTube 網路錯誤、429 與真實影片端到端穩定性仍需人工驗收。
 
 2. **YouTube 會員影片 / 受限制影片**
    - 可參考既有 Selenium crawler 或瀏覽器自動化原型，但公開文件不依賴作者本機路徑。
@@ -396,5 +396,5 @@ Dashboard container 配置：
 目前限制：
 
 - Docker Dashboard 使用乾淨 headless Chromium；若影片需要 Windows Chrome 登入狀態，仍可能要使用本機 CLI 或後續 profile 掛載策略。
-- 真實 YouTube CC / automatic captions adapter 尚未接上。
-- 尚未支援多檔逐字稿一起推理、股票代號清單校正與專有詞彙增強；後續分別由 #57、#58、#59 處理。
+- 字幕擷取已在快速影音報告流程實作；YouTube 網路錯誤與 429 可能令字幕讀取失敗，並觸發 OpenAI 音訊轉錄後備流程。
+- 多來源統計與股票身分查核已接入；統計排行依不同講者數、不同節目數、可追溯提及次數。專有詞彙增強仍待 #59 處理。

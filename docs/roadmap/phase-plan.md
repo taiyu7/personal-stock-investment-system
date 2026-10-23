@@ -2,11 +2,11 @@
 
 ## 近期優先任務
 
-1. #57 多檔 AI 推理 / NotebookLM-like 聚合：多份逐字稿或研究報告一起推理，輸出固定格式，例如高頻提及股票、多位分析師看好 / 看壞名單。
-2. #58 台股上市櫃公司代號 / 公司名驗證：每天用固定清單修正逐字稿與研究報告中的股票提及。
-3. #59 專有詞彙 / glossary：加入台股、半導體與投顧常用詞，例如 CoWoS，提升 ASR 與 AI 彙整品質。
-4. 補上真實 YouTube CC / automatic captions adapter，讓有公開字幕的影片可不經 ASR 直接匯入逐字稿。
-5. 設計 YouTube 會員影片 / 受限制影音來源的合法取得流程，特別是 Docker Dashboard 與 Windows Chrome profile 的邊界。
+1. #57、#72、#73、#74：影音報告、人工修正與統計流程已完成程式整合；依各 Issue 追蹤人工驗收與 PR 狀態。
+2. #58 台股上市櫃公司代號／公司名查核：官方清單驗證已完成，持續追蹤真實報告品質。
+3. #59 專有詞彙／glossary：加入台股、半導體與投顧常用詞，例如 CoWoS，提升 ASR 與 AI 彙整品質。
+4. 公開影片字幕已接入快速影音報告流程；後續需驗收 YouTube 網路限制下的穩定性與錯誤恢復。
+5. 設計 YouTube 會員影片／受限制影音來源的合法取得流程，特別是 Docker Dashboard 與 Windows Chrome profile 的邊界。
 6. 使用真實投顧 PDF / 簡報 PDF 驗收 PDF to Markdown 品質，確認文字、頁碼、表格與圖表附近文字是否足夠分析。
 7. 驗證研究報告輸出到 Obsidian inbox / 自選路徑後的整理流程，決定是否新增長期知識頁回寫規則。
 8. 建立公司盡職調查工具與財報分析工具。
@@ -50,7 +50,8 @@ Docker 開發環境完成後，先補強自動化測試，再開始搭建後續�
 
 自動化測試穩定後，優先搭建直接支援投資研究的工具。這裡的「工具」優先指盡職調查、財報分析與影片分析，不是 MCP 或回測底層。
 
-- [ ] 補真實 YouTube CC / automatic captions adapter，支援公開字幕匯入、語言選擇與清楚錯誤狀態
+- [x] 快速影音報告讀取 YouTube zh-TW 字幕；無可用繁體字幕時嘗試 zh-Hans／zh-CN，並轉為繁體後交給研究報告流程
+- [ ] 以多支真實 YouTube 影片驗收字幕下載、429／網路錯誤與 ASR fallback
 - [x] #24 重構研究來源 adapter 邊界，建立通用 import status/result，供後續 YouTube、本機影音、podcast 與截圖 adapter 共用
 - [x] #45 OpenVINO ASR adapter，支援 OpenVINO Breeze-ASR-25 FP32 逐字稿輸出。
 - [x] #47 Browser Session 媒體取得 adapter，支援 Selenium performance log discovery、yt-dlp download 與 FFmpeg WAV 前處理。
@@ -83,7 +84,10 @@ Docker 開發環境完成後，先補強自動化測試，再開始搭建後續�
 
 ### Phase 1.7 目前限制
 
-- YouTube：Dashboard 已可透過 browser media acquisition + ASR provider 處理公開影片；但尚未實際抓取 YouTube CC 或 automatic captions。
+- YouTube：快速影音報告已接入 YouTube 中文字幕擷取，依序偏好 zh-TW，後備 zh-Hans／zh-CN 並轉為繁體；沒有可用中文字幕時才進入 ASR。字幕請求可能遇到 YouTube 的網路錯誤或 429 限制，真實來源的穩定性仍待人工驗收。
+- 影音報告：快速單片與循序批次流程、單片下載／全部下載、失敗重試與強制中斷已實作；統計分析允許一份成功報告，排名依不同講者數、不同節目數、可追溯提及次數。完整批次與多來源真實素材驗收仍待完成。
+- 人工查核：永久修正規則與 ETF／海外股票／族群／非股票分類已整合；仍需以使用者實際報告驗收修正結果。
+- Dashboard：唯讀 SQLite 資料瀏覽和 VLM 技術分析操作頁已加入；VLM 真實圖面品質尚未人工驗收。
 - Adapter 邊界：已建立通用 import status/result，可表達 `available`、`manual_fallback`、`transcript_unavailable`、`login_required`、`unsupported_source`、`media_unavailable`、`caption_language_unavailable` 與 `capture_unavailable`。
 - 影音來源：公開影片 URL -> 逐字稿 -> 報告的 MVP 已可運行；#31、#67、#39 已合併且 fake 自動測試通過，但仍待人工驗收。Dashboard 已新增未完成的 VLM 技術分析操作頁；本機影片完整匯入、本機音訊、podcast 與會員影片穩定 UI 流程仍未完成；完整規劃見 `docs/research/media-source-ingestion-roadmap.md`。
 - 會員影片：本機 CLI 可使用 Windows Chrome profile / cookie 與 yt-dlp remote components；Docker Dashboard 目前使用乾淨 headless Chromium，若來源需要登入，仍需後續設計 profile 掛載或合法素材提供流程。

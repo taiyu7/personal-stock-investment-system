@@ -2,7 +2,7 @@
 
 這是個人股票投資系統的唯一主線 Repo。系統以台股投資流程為核心，將美股、半導體與總經指標作為盤前參考，逐步整合 Dashboard、共用市場資料服務、個人交易紀錄、MCP、回測與多模型 AI 工作流。
 
-目前可直接使用的是 Streamlit Dashboard、yfinance 按需行情、規則訊號、SQLite 每日復盤，以及第一階段研究來源分析工具。研究工具已可從 Dashboard 貼上影片 URL，經瀏覽器媒體取得、FFmpeg 音訊前處理、OpenAI 或 OpenVINO 轉錄 provider 產生逐字稿 JSON，再交給本機規則或 OpenAI 研究彙整 provider 產生固定格式 Markdown 報告。MCP、回測引擎與 AI Orchestrator 會依路線圖分階段加入。
+目前可直接使用的是 Streamlit Dashboard、yfinance 按需行情、規則訊號、SQLite 每日復盤，以及影音研究報告流程。研究頁提供快速單片與多片批次處理、字幕優先轉錄、股票人工查核、固定格式報告與統計分析；另有唯讀 SQLite 瀏覽和 VLM 技術分析操作頁。MCP、回測引擎與 AI Orchestrator 會依路線圖分階段加入。
 
 目前開發流程以 Docker 為預設執行環境；本機 Python 只作為可選 fallback，不是日常啟動方式。
 
@@ -62,19 +62,23 @@ Dashboard 只負責畫面與互動。行情取得、資料正規化、市場判�
 ## Dashboard 功能
 
 - **市場儀表板**：四個觀察區塊、市場摘要、五日行情、漲跌幅與月線 K 線圖。
-- **研究來源分析**：從左側 sidebar 進入，支援手動文字／逐字稿、ASR 逐字稿 JSON、PDF 路徑、公開 YouTube URL fallback，以及 Dashboard 內建的影片 URL 轉逐字稿流程；可選轉錄 provider 與研究彙整 provider，產生固定格式研究報告 Markdown，並輸出到 Obsidian inbox、自選路徑或只在介面顯示。
+- **影音生成摘要報告**：快速模式可輸入多組影片連結、日期和名稱，依序產生個別報告與統計分析；一份成功報告即可產生統計。YouTube 字幕先讀 zh-TW，沒有可用繁體字幕時再讀簡體字幕並轉為繁體，兩者都不可用才執行 OpenAI 音訊轉錄。進階模式保留原有逐字稿、PDF 與報告設定。
+- **人工查核與統計分析**：可將股票身分修正保存為本機規則，並將 ETF、海外股票、族群與非股票分類。統計排行依不同講者數、不同節目數、可追溯提及次數排列，畫面與 Markdown 同時顯示三項數字。
+- **SQLite 資料庫**：唯讀查看目前資料庫的資料表、欄位與分頁資料列。
+- **投顧影片 VLM 技術分析**：以影片截圖與逐字稿位置整理技術圖面觀察；真實素材與模型輸出品質仍待人工驗收。
 - **每日復盤**：填寫盤前／盤後持股水位、交易紀錄、計畫符合度與檢討內容；可依日期儲存、覆寫、載入及下載 Markdown。
 - **股價概念筆記**：保存既有的價格、成交量與判讀框架。
-- **開發歷程**：保留 AutoDashboard v0.1 至 v0.6 的歷史，並記錄整合後的功能演進。
+- **開發歷程**：保留 AutoDashboard v0.1 至 v0.6 的歷史，並記錄整合後至 v0.11.0 的功能演進。
 
-研究來源分析目前的 MVP 主線是：影片 URL 先取得媒體並產生 ASR 逐字稿 JSON，接著用該 JSON 產生研究報告。公開 YouTube URL 來源類型仍保留為字幕 adapter 的 fallback 路徑；真實 YouTube CC / automatic captions adapter 尚未接上。若不想重新轉錄，也可以手動貼上逐字稿或既有 ASR JSON 路徑。
+快速研究主線是：檢查 YouTube 是否有 zh-TW 字幕，否則嘗試 zh-Hans／zh-CN 並轉成繁體；無可用中文字幕才取得媒體並使用 OpenAI 音訊轉錄。使用者可手動貼上逐字稿或載入既有 ASR JSON。字幕下載會受 YouTube 網路狀態與請求限制影響；讀取失敗時才進入音訊轉錄流程。
 
 ### 轉錄 provider
 
-Dashboard 的「研究來源分析」頁分成兩段：
+「影音生成摘要報告」頁面分為三個分頁：
 
-1. **取得逐字稿**：貼上影片 URL，選擇 `只產生 WAV`、`OpenAI` 或 `OpenVINO`。
-2. **產生研究報告**：使用剛產生的 ASR JSON，選擇研究彙整 provider，輸出 Markdown 報告。
+1. **快速產生報告**：輸入影片連結、日期與名稱，可一次處理多支影片；自動使用可用中文字幕，沒有時再做 OpenAI 音訊轉錄，並產生個別報告與統計報告。
+2. **產生統計分析報告**：手動選取一份或多份固定研究報告，使用指定 OpenAI 模型產生有來源依據的統計摘要。
+3. **進階模式**：保留逐字稿取得、轉錄 provider 選擇、研究彙整 provider 與輸出位置等完整設定。
 
 目前轉錄 provider 狀態：
 
@@ -575,7 +579,7 @@ AI Orchestrator 負責任務分派、流程編排與結果整合，不直接保�
 1. **Phase 1：本機骨架**：Repo、文件、環境範本與 Git，已完成。
 2. **Phase 1.5：知識庫與開發環境隔離**：知識庫與 Docker 開發環境已可用。
 3. **Phase 1.6：自動化測試補強**：核心單元測試、Docker-based CI 與 Dashboard smoke test 已完成。
-4. **Phase 1.7：研究工具優先**：第一階段研究來源分析工具已完成 MVP；OpenVINO ASR、browser media acquisition、OpenAI 音訊轉錄、研究彙整 provider 與 Dashboard 端影片 URL 轉研究報告流程已接上。尚未完成真實 YouTube CC 字幕 adapter、真實 PDF 品質驗收、知識庫長期整理流程、多檔 AI 推理、股票代號驗證與專有詞彙增強。
+4. **Phase 1.7：研究工具優先**：影音研究流程已包含 YouTube 中文字幕優先、快速／批次固定報告、人工查核規則、統計分析、SQLite 瀏覽與 VLM 操作頁。字幕、VLM 與真實影片的端到端品質仍待持續人工驗收；真實 PDF 品質、知識庫長期整理與專有詞彙增強仍在後續規劃。
 5. **Phase 2：資料層 MVP**：Dashboard、yfinance、共用服務與 SQLite 核心功能已完成；下一步是在研究工具 MVP 後驗證預設 ticker 的資料完整性，決定是否新增 TWSE、TPEx 或 FinMind provider。
 6. **Phase 3：MCP MVP**：建立唯讀 server，提供市場行情、市場摘要與每日復盤查詢。
 7. **Phase 4：回測 MVP**：建立策略介面、示範策略、績效統計與報告。
@@ -583,4 +587,4 @@ AI Orchestrator 負責任務分派、流程編排與結果整合，不直接保�
 
 完整階段清單請見 `docs/roadmap/phase-plan.md`，分層設計請見 `docs/architecture/overview.md`，資料庫 schema 與 migration 策略請見 `db/README.md`。第一階段研究來源分析工具規格請見 `docs/research/phase-1-research-source-spec.md`。
 
-目前已完成研究來源分析工具的 GitHub Issues：#12 至 #17、#24、#45、#47、#49、#50、#51、#55、#60。下一批研究工具工作會優先處理多檔 AI 推理、股票代號 / 公司名驗證、專有詞彙增強、真實 YouTube 字幕 adapter，以及 YouTube 會員影片 / 受限制來源合法取得流程。完整規劃請見 `docs/research/media-source-ingestion-roadmap.md`。
+研究來源功能與未完成的人工驗收項目依 GitHub Issues #57、#72、#73、#74、#75 追蹤；#58 公司清單查核已完成。後續仍需處理專有詞彙增強、真實影音與 PDF 品質驗收，以及 YouTube 會員影片／受限制來源的合法取得流程。完整規劃請見 `docs/research/media-source-ingestion-roadmap.md`。

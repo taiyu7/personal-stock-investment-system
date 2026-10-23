@@ -8,10 +8,12 @@
 使用者
   │
   ▼
-Streamlit Dashboard v0.10.0
+Streamlit Dashboard v0.11.0
   │
   ├─ 市場儀表板
-  ├─ 研究來源分析
+  ├─ 影音生成摘要報告
+  ├─ SQLite 資料庫（唯讀瀏覽）
+  ├─ 投顧影片 VLM 技術分析
   ├─ 每日復盤
   ├─ 股價概念
   └─ 開發歷程
@@ -26,6 +28,10 @@ personal_stock_investment_system 共用核心
   ├─ research/media.py
   ├─ research/asr.py
   ├─ research/browser_asr.py
+  ├─ research/youtube_captions.py
+  ├─ research/quick_video_report.py
+  ├─ research/statistical_report.py
+  ├─ research/correction_rules.py
   ├─ research/markdown.py
   ├─ research/pdf.py
   ├─ research/youtube.py
@@ -52,7 +58,7 @@ personal_stock_investment_system 共用核心
 `apps/dashboard/` 是每天使用的盤前與盤後工作台。
 
 - 顯示四個市場觀察區塊、整體市場摘要、五日行情與月線圖。
-- 從左側 sidebar 提供研究來源分析入口，支援手動文字、ASR 逐字稿 JSON、PDF 路徑、公開 YouTube URL fallback，以及影片 URL 轉逐字稿再產生研究報告的 MVP 流程。
+- 從左側 sidebar 提供「影音生成摘要報告」入口，包含快速單片／批次產生、統計分析與進階研究流程；另有 SQLite 唯讀資料瀏覽與 VLM 技術分析操作頁。
 - 提供每日復盤表單，支援儲存、覆寫、載入與 Markdown 下載。
 - 使用 Streamlit 15 分鐘記憶體快取減少重複抓取行情。
 - 不直接承擔可重用商業邏輯；共用邏輯應放回核心套件。
@@ -132,7 +138,10 @@ Dashboard image 在 #60 後會安裝 `ffmpeg`、`chromium`、`chromium-driver` �
 
 ## 已知限制
 
-- YouTube：公開影片可透過 browser media acquisition + ASR provider 產生逐字稿；但核心尚未接真實 YouTube CC / automatic captions adapter。因此 `公開 YouTube URL` 字幕來源仍可能顯示 `transcript_unavailable`，除非使用者改走 ASR JSON、手動逐字稿或摘要。
+- YouTube：快速影音流程先嘗試取得 zh-TW 字幕，再嘗試簡體中文字幕並轉為繁體；兩者不可用時才使用音訊轉錄。YouTube 網路錯誤或 429 請求限制仍可能令字幕讀取失敗，真實影片的端到端穩定性待持續驗收。
+- 統計報告：一份或多份成功固定研究報告皆可產生統計；同一份來源中的不同講者分開計數。排序固定為不同講者數、不同節目數、可追溯提及次數，三項數字都由程式計算。
+- 快速批次：影片逐支依序處理，保留個別成功報告；部分失敗不會丟棄已完成報告，使用者可重試失敗影片或強制中斷。
+- 人工查核：永久修正規則保存於本機 SQLite，並與官方上市／上櫃公司清單分開；ETF、海外股票、族群與非股票分類不混入台股公司主檔。
 - PDF：文字型 PDF 已可轉 Markdown；掃描 PDF、複雜表格、簡報圖文混排仍需真實樣本驗收。
 - 股票觀點分析：本機規則與 OpenAI 研究彙整 provider 已可用；OpenAI 失敗會回退本機規則。Claude 尚未接真實 API。缺資料時仍應輸出 `未判定` 或 `待查證`。
 - 輸出：已支援 Obsidian inbox、自選路徑與不輸出本機檔案；把輸出整理成 Obsidian 長期知識頁仍是後續流程。
