@@ -2,7 +2,15 @@ from __future__ import annotations
 
 import streamlit as st
 
-SIDEBAR_PAGES = ("市場交易儀表板", "影音生成摘要報告", "每日復盤輸出", "進銘的股價概念", "開發歷程")
+SIDEBAR_PAGES = (
+    "市場交易儀表板",
+    "影音生成摘要報告",
+    "投顧影片VLM 技術分析",
+    "每日復盤輸出",
+    "進銘的股價概念",
+    "SQLite 資料庫",
+    "開發歷程",
+)
 
 
 def render_global_styles() -> None:

@@ -2,8 +2,13 @@ from __future__ import annotations
 
 import os
 import re
+import multiprocessing
+from queue import Empty
+from io import BytesIO
+from dataclasses import replace
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
+from zipfile import ZIP_DEFLATED, ZipFile
 
 import streamlit as st
 
@@ -21,14 +26,24 @@ from personal_stock_investment_system.research import (
     run_browser_session_asr_pipeline,
     run_existing_media_asr_pipeline,
     QuickReportProgressEvent,
+    QuickVideoReportBatchResult,
     QuickVideoReportInput,
     QuickVideoReportResult,
+    ResearchCorrectionRule,
+    ResearchCorrectionRuleRepository,
+    apply_research_correction_rules,
+    parse_issue_target,
+    parse_research_report_markdown,
+    generate_statistical_report,
     build_quick_video_report_filename,
     run_quick_video_research_report,
     run_phase_one_research_source_analysis,
+    render_research_report,
     sync_taiwan_stock_directory,
 )
-from personal_stock_investment_system.research.media import safe_filename
+from personal_stock_investment_system.research.media import SeleniumBrowserSessionConfig, safe_filename
+from personal_stock_investment_system.research.entrypoint import AvailableYouTubeCaptionClient
+from personal_stock_investment_system.research.batch_job import run_video_batch_job, terminate_video_batch_process
 from personal_stock_investment_system.storage import TaiwanStockRepository, sqlite_database_path
 
 
@@ -81,8 +96,9 @@ WINDOWS_BROWSER_ASR_SETTINGS = {
 
 QUICK_REPORT_TIMELINE_STEPS = (
     ("validate", "驗證輸入與公司清單"),
+    ("captions", "檢查影片現成字幕"),
     ("media", "取得影片媒體並轉換 ASR 音訊"),
-    ("transcription", "OpenAI 產生逐字稿"),
+    ("transcription", "音訊轉錄（無可用字幕時）"),
     ("analysis", "OpenAI 研究彙整"),
     ("render", "查核股票身分並產生 Markdown"),
     ("complete", "摘要報告完成"),
@@ -151,7 +167,11 @@ def _is_available_status(status: str) -> bool:
 
 
 def _render_browser_asr_status(result: BrowserSessionAsrResult) -> None:
-    if result.media_result.is_available():
+    if result.caption_diagnostic:
+        st.warning(result.caption_diagnostic)
+    if result.transcription is not None and result.transcription.status_message.startswith("已使用 YouTube 現成字幕"):
+        st.info(result.media_result.status_message)
+    elif result.media_result.is_available():
         st.success("音檔已取得並轉成 16 kHz mono WAV。")
     else:
         st.error(result.media_result.status_message or "音檔取得失敗。")
@@ -161,7 +181,7 @@ def _render_browser_asr_status(result: BrowserSessionAsrResult) -> None:
         st.code(str(result.media_result.artifact.path), language=None)
     if result.transcription is not None:
         if _is_available_status(result.transcription.status):
-            st.success("逐字稿已產生。")
+            st.success(result.transcription.status_message)
         else:
             st.warning(result.transcription.status_message or "逐字稿尚未產生。")
         if result.transcription.transcript_path is not None:
@@ -201,40 +221,530 @@ def _store_transcript_result(result: BrowserSessionAsrResult, page_url: str) -> 
 def render_research_source_analysis_page() -> None:
     st.subheader("影音生成摘要報告")
     st.caption("快速模式只需三個欄位即可產生固定研究報告；進階模式保留原有完整設定。")
-    quick_tab, advanced_tab = st.tabs(("快速產生報告", "進階模式"))
+    quick_tab, statistics_tab, advanced_tab = st.tabs(("快速產生報告", "產生統計分析報告", "進階模式"))
     with quick_tab:
         _render_quick_video_report_page()
+    with statistics_tab:
+        _render_statistical_report_page()
     with advanced_tab:
         _render_advanced_research_source_analysis_page()
 
 
+def _render_statistical_report_page() -> None:
+    st.markdown("#### 產生統計分析報告")
+    st.caption("選取至少兩份固定研究報告 Markdown；股票排名與三項計數由程式計算，OpenAI 只負責依附證據整合文字。")
+    files = st.file_uploader(
+        "選取多份固定研究報告 Markdown",
+        type=("md",),
+        accept_multiple_files=True,
+        key="statistical_report_uploads",
+        help="可多選固定研究報告檔案；支援最新下載版本，也可匯入舊版固定格式報告。",
+    )
+    default_model = os.getenv("OPENAI_RESEARCH_AGGREGATION_MODEL", os.getenv("OPENAI_RESEARCH_ANALYSIS_MODEL", "gpt-4.1-mini"))
+    model = st.text_input("OpenAI 模型", value=default_model, key="statistical_report_model")
+    st.session_state.setdefault("statistical_report_result", None)
+    if st.button("產生統計分析報告", type="primary", icon=":material/analytics:", key="generate_statistical_report"):
+        try:
+            reports = tuple(parse_research_report_markdown(file.getvalue().decode("utf-8")) for file in files or ())
+            if len(reports) < 2:
+                raise ValueError("請至少選取兩份固定研究報告。")
+            if not os.getenv("OPENAI_API_KEY"):
+                raise ValueError("尚未設定 OPENAI_API_KEY，無法產生統計分析報告。")
+            directory = TaiwanStockRepository(sqlite_database_path()).load_directory()
+            if directory is None or not directory.companies:
+                raise ValueError("本機沒有可用公司清單，請先在進階模式同步官方上市／上櫃公司清單。")
+            correction_rules = _correction_rule_repository().list_rules()
+            reports = tuple(
+                apply_research_correction_rules(report, correction_rules, directory)
+                for report in reports
+            )
+            st.session_state["statistical_report_result"] = generate_statistical_report(reports, directory, model=model)
+            st.session_state["statistical_report_error"] = ""
+        except Exception as error:  # noqa: BLE001 - show provider and parser errors inside this page.
+            st.session_state["statistical_report_error"] = str(error)
+            st.session_state["statistical_report_result"] = None
+    if st.session_state.get("statistical_report_error"):
+        st.error(st.session_state["statistical_report_error"])
+    result = st.session_state.get("statistical_report_result")
+    if result is not None:
+        st.success(f"已完成統計分析（{result.provider}／{result.model}）。")
+        st.caption(f"下載檔名：{result.filename}")
+        st.markdown(result.markdown)
+        st.download_button(
+            "下載統計分析報告 Markdown", data=result.markdown.encode("utf-8"),
+            file_name=result.filename, mime="text/markdown", icon=":material/download:",
+        )
+
+
 def _render_quick_video_report_page() -> None:
     st.markdown("#### 快速產生報告")
-    st.caption("固定使用 OpenAI 逐字稿與 OpenAI 研究彙整，並強制以本機公司清單查核股票代號與公司名稱。")
-    st.session_state.setdefault("quick_video_report_result", None)
-
-    with st.form("quick_video_report_form", border=False):
-        video_url = st.text_input(
-            "影片連結",
-            placeholder="https://www.youtube.com/watch?v=...",
-            key="quick_video_report_url",
+    st.caption("優先使用 YouTube 現成字幕；沒有可用字幕時使用 OpenAI 音訊轉錄。研究彙整固定使用 OpenAI，並以本機公司清單查核股票身分。")
+    count = st.number_input("本次影片數", min_value=1, max_value=10, value=2, step=1, key="quick_video_batch_count")
+    st.session_state.setdefault("quick_video_report_batch_result", None)
+    with st.form("quick_video_report_batch_form", border=False):
+        entries = []
+        for index in range(int(count)):
+            st.markdown(f"**影片 {index + 1}**")
+            url_col, date_col, title_col = st.columns((2, 1, 1))
+            video_url = url_col.text_input("影片連結", placeholder="https://www.youtube.com/watch?v=...", key=f"quick_video_batch_url_{index}")
+            published_date = date_col.date_input(
+                "影片日期", value=None, format="YYYY-MM-DD", key=f"quick_video_batch_date_{index}",
+                help="必填，格式固定為 YYYY-MM-DD。",
+            )
+            title = title_col.text_input("影片名稱", key=f"quick_video_batch_title_{index}")
+            entries.append((video_url, published_date, title))
+        submitted = st.form_submit_button(
+            "依序產生報告並統計", type="primary", icon=":material/auto_awesome:",
+            disabled=st.session_state.get("quick_video_batch_job") is not None,
         )
-        published_date = st.date_input(
-            "影片日期",
-            value=None,
-            format="YYYY-MM-DD",
-            key="quick_video_report_date",
-            help="必填。會用於報告來源資訊與下載檔名。",
-        )
-        title = st.text_input("影片名稱", key="quick_video_report_title")
-        submitted = st.form_submit_button("產生摘要報告", type="primary", icon=":material/auto_awesome:")
 
     if submitted:
-        _run_quick_video_report(video_url=video_url, published_date=published_date, title=title)
+        _run_quick_video_report_batch(entries)
+    if st.session_state.get("quick_video_batch_job") is not None:
+        _render_quick_batch_job()
+    result = st.session_state.get("quick_video_report_batch_result")
+    if isinstance(result, QuickVideoReportBatchResult):
+        _render_quick_video_report_batch_result(result)
+    _render_correction_rules_manager()
 
-    result = st.session_state.get("quick_video_report_result")
-    if isinstance(result, QuickVideoReportResult):
-        _render_quick_video_report_result(result)
+
+def _build_quick_video_browser_input(request: QuickVideoReportInput) -> BrowserSessionAsrInput:
+    browser_settings = get_default_browser_asr_settings()
+    filename = build_quick_video_report_filename(request)
+    return build_browser_asr_input(
+        page_url=request.video_url, output_stem=Path(filename).stem, title=request.title, asr_provider="openai",
+        chrome_user_data_dir=str(browser_settings["chrome_user_data_dir"]),
+        chrome_binary_path=str(browser_settings["chrome_binary_path"]),
+        chromedriver_path=str(browser_settings["chromedriver_path"]), headless=bool(browser_settings["headless"]),
+        settle_seconds=float(browser_settings["settle_seconds"]),
+        playback_wait_seconds=float(browser_settings["playback_wait_seconds"]),
+        yt_dlp_cookies_from_browser=str(browser_settings["yt_dlp_cookies_from_browser"]),
+        yt_dlp_remote_components=str(browser_settings["yt_dlp_remote_components"]),
+        yt_dlp_download_page_url=True, openvino_model_dir=str(browser_settings["openvino_model_dir"]),
+        openvino_device=str(browser_settings["openvino_device"]),
+        openai_transcription_model=os.getenv("OPENAI_AUDIO_TRANSCRIPTION_MODEL", DEFAULT_OPENAI_TRANSCRIPTION_MODEL),
+        openai_transcription_prompt=os.getenv("OPENAI_AUDIO_TRANSCRIPTION_PROMPT", ""),
+        openai_chunk_length_seconds=float(os.getenv("OPENAI_AUDIO_CHUNK_LENGTH_SECONDS", DEFAULT_OPENAI_CHUNK_LENGTH_SECONDS)),
+        language=str(browser_settings["language"]),
+    )
+
+
+def _run_quick_video_report_batch(entries) -> None:
+    if st.session_state.get("quick_video_batch_job") is not None:
+        st.warning("已有批次正在處理。請先等待完成或按「強制中斷」。")
+        return
+    if not os.getenv("OPENAI_API_KEY"):
+        st.error("尚未設定 OPENAI_API_KEY，無法執行 OpenAI 逐字稿與研究彙整。")
+        return
+    repository = TaiwanStockRepository(sqlite_database_path())
+    directory = repository.load_directory()
+    latest_sync = repository.latest_sync(status="success")
+    valid = []
+    invalid = []
+    for index, (video_url, published_date, title) in enumerate(entries, start=1):
+        errors = []
+        if published_date is None:
+            errors.append("影片日期必填，格式固定為 YYYY-MM-DD。")
+        if not video_url.strip():
+            errors.append("影片連結必填。")
+        elif urlsplit(video_url.strip()).scheme not in {"http", "https"} or not urlsplit(video_url.strip()).netloc:
+            errors.append("影片連結必須是有效的 HTTP(S) URL。")
+        if not title.strip():
+            errors.append("影片名稱必填。")
+        if errors:
+            invalid.append((index, "；".join(errors)))
+            continue
+        request = QuickVideoReportInput(video_url.strip(), published_date, title.strip())
+        valid.append((index, request, _build_quick_video_browser_input(request)))
+
+    previous = st.session_state.get("quick_video_report_batch_result")
+    retained = []
+    pending = []
+    current_indices = {index for index, _request, _browser_input in valid}
+    for index, request, browser_input in valid:
+        old = next((item for item in previous.items if item.index == index), None) if isinstance(previous, QuickVideoReportBatchResult) else None
+        if old is not None and old.request == request and old.result.is_available:
+            retained.append(old)
+        else:
+            pending.append((index, request, browser_input))
+    if not pending and len(retained) < 2:
+        st.session_state["quick_video_report_batch_result"] = QuickVideoReportBatchResult(tuple(retained), tuple(invalid))
+        return
+    _launch_quick_batch_job(
+        tuple(pending), tuple(retained), tuple(invalid), directory,
+        tuple(sorted(current_indices)), {index: request.title for index, request, _ in valid},
+        latest_sync is not None and latest_sync.is_stale(),
+    )
+
+
+def _launch_quick_batch_job(pending, retained, invalid, directory, indices, titles, stale) -> None:
+    context = multiprocessing.get_context("spawn")
+    output_queue = context.Queue()
+    process = context.Process(
+        target=run_video_batch_job,
+        args=(pending, retained, invalid, directory, sqlite_database_path(), output_queue),
+        daemon=True,
+    )
+    try:
+        process.start()
+    except Exception as error:  # noqa: BLE001 - keep existing reports when the worker cannot start.
+        output_queue.close()
+        st.error(f"無法啟動報告處理程序：{error}")
+        return
+    st.session_state["quick_video_batch_job"] = {
+        "process": process, "queue": output_queue,
+        "items": {item.index: item for item in retained}, "events": {},
+        "invalid": invalid, "indices": indices,
+        "titles": titles, "stale": stale,
+        "aggregate": False,
+    }
+
+
+@st.fragment(run_every="1s")
+def _render_quick_batch_job() -> None:
+    job = st.session_state.get("quick_video_batch_job")
+    if job is None:
+        return
+    completed = None
+    error = ""
+    while True:
+        try:
+            message = job["queue"].get_nowait()
+        except Empty:
+            break
+        if message[0] == "progress":
+            job["events"].setdefault(message[1], []).append(message[2])
+        elif message[0] == "item":
+            item = message[1]
+            job["items"][item.index] = item
+        elif message[0] == "aggregate":
+            job["aggregate"] = True
+        elif message[0] == "done":
+            completed = message[1]
+        elif message[0] == "error":
+            error = message[1]
+    if completed is not None:
+        st.session_state["quick_video_report_batch_result"] = completed
+        st.session_state["quick_video_batch_stale"] = job["stale"]
+        _close_quick_batch_job(job)
+        st.rerun()
+    if error or not job["process"].is_alive():
+        _finish_interrupted_batch(job, error or "處理程序意外結束。")
+        st.rerun()
+    with st.container(border=True):
+        st.info("正在產生報告；可隨時強制中斷，已完成的個別報告會保留。")
+        if st.button("強制中斷", type="secondary", icon=":material/stop_circle:", key="stop_quick_video_batch"):
+            terminate_video_batch_process(job["process"])
+            _finish_interrupted_batch(job, "已由使用者強制中斷。")
+            st.rerun()
+        lines = []
+        for index in job["indices"]:
+            latest_events = {event.step_id: event for event in job["events"].get(index, ())}
+            item = job["items"].get(index)
+            state = (
+                "完成" if item is not None and item.result.is_available else
+                "失敗" if item is not None else
+                "處理中" if latest_events else "等待中"
+            )
+            lines.append(f"影片 {index}｜{job['titles'][index]}｜{state}")
+            for step_id, label in QUICK_REPORT_TIMELINE_STEPS:
+                event = latest_events.get(step_id)
+                marker = {"pending": "○", "running": "▶", "success": "✓", "failed": "✕"}.get(event.status if event else "pending", "○")
+                lines.append(f"  {marker} {label}")
+                if event is not None and event.message:
+                    lines.append(f"    {_safe_media_error(event.message)}")
+        if job["aggregate"]:
+            lines.append("▶ 套用查核規則並產生統計分析報告")
+        st.text("\n".join(lines))
+
+
+def _finish_interrupted_batch(job, message: str) -> None:
+    items = tuple(job["items"][index] for index in sorted(job["items"]))
+    st.session_state["quick_video_report_batch_result"] = QuickVideoReportBatchResult(
+        items, job["invalid"], aggregation_error=message,
+    )
+    _close_quick_batch_job(job)
+
+
+def _close_quick_batch_job(job) -> None:
+    job["process"].join(timeout=0.2)
+    job["queue"].close()
+    st.session_state["quick_video_batch_job"] = None
+
+
+def _apply_rules_to_batch(
+    batch: QuickVideoReportBatchResult,
+    repository: ResearchCorrectionRuleRepository,
+    directory,
+) -> QuickVideoReportBatchResult:
+    items = tuple(
+        replace(
+            item,
+            original_result=item.original_result or item.result,
+            result=_refresh_quick_result_with_rules(item.original_result or item.result, repository, directory),
+        )
+        for item in batch.items
+    )
+    refreshed = replace(batch, items=items, statistical_report=None, aggregation_error="")
+    reports = tuple(
+        item.result.research_result.report for item in items
+        if item.result.is_available and item.result.research_result is not None
+    )
+    if len(reports) >= 2 and directory is not None:
+        try:
+            return replace(refreshed, statistical_report=generate_statistical_report(reports, directory))
+        except Exception as error:  # noqa: BLE001 - keep every completed per-video report available.
+            return replace(refreshed, aggregation_error=str(error))
+    return refreshed
+
+
+def _recompute_batch_aggregate(batch: QuickVideoReportBatchResult, directory) -> QuickVideoReportBatchResult:
+    reports = tuple(
+        item.result.research_result.report for item in batch.items
+        if item.result.is_available and item.result.research_result is not None
+    )
+    if len(reports) < 2 or directory is None:
+        return replace(batch, statistical_report=None, aggregation_error="")
+    try:
+        return replace(batch, statistical_report=generate_statistical_report(reports, directory), aggregation_error="")
+    except Exception as error:  # noqa: BLE001 - individual reports remain available.
+        return replace(batch, statistical_report=None, aggregation_error=str(error))
+
+
+def _render_quick_video_report_batch_result(batch: QuickVideoReportBatchResult) -> None:
+    metric_cols = st.columns(4)
+    metric_cols[0].metric("影片總數", batch.total_count)
+    metric_cols[1].metric("成功", batch.success_count)
+    metric_cols[2].metric("失敗", batch.failure_count)
+    metric_cols[3].metric("輸入無效", len(batch.invalid_items))
+    if batch.invalid_items:
+        with st.expander("無效輸入", expanded=True):
+            for index, error in batch.invalid_items:
+                st.error(f"影片 {index}：{error}")
+    if batch.failure_count and st.session_state.get("quick_video_batch_job") is None:
+        if st.button("只重試失敗影片", type="secondary", icon=":material/replay:", key="retry_failed_video_reports"):
+            repository = TaiwanStockRepository(sqlite_database_path())
+            directory = repository.load_directory()
+            failed = tuple(
+                (item.index, item.request, item.browser_input)
+                for item in batch.items if not item.result.is_available
+            )
+            retained = tuple(item for item in batch.items if item.result.is_available)
+            _launch_quick_batch_job(
+                failed, retained, batch.invalid_items, directory,
+                tuple(item.index for item in batch.items),
+                {item.index: item.request.title for item in batch.items},
+                False,
+            )
+            st.rerun()
+    if batch.success_count and batch.success_count < 2:
+        st.info("個別報告已保留；至少兩份成功報告才能產生統計分析報告。")
+    if batch.aggregation_error:
+        st.error(f"統計分析報告未完成，但個別報告仍可使用：{batch.aggregation_error}")
+    for item in batch.items:
+        with st.expander(f"影片 {item.index}｜{item.request.title}｜{'成功' if item.result.is_available else '失敗'}", expanded=not item.result.is_available):
+            if not item.result.is_available:
+                st.error(_safe_media_error(item.result.error or "摘要報告未完成。"))
+                continue
+            if item.result.browser_asr_result is not None and item.result.browser_asr_result.caption_diagnostic:
+                st.warning(item.result.browser_asr_result.caption_diagnostic)
+            st.download_button(
+                "下載個別報告 Markdown", data=item.result.markdown.encode("utf-8"),
+                file_name=item.result.filename, mime="text/markdown", key=f"download_quick_report_{item.index}",
+                icon=":material/download:",
+            )
+            _render_manual_review_panel(item.result, batch_index=item.index)
+            st.caption(f"下載檔名：{item.result.filename}")
+            st.markdown(_research_report_preview_markdown(item.result.markdown))
+    if batch.statistical_report is not None:
+        st.markdown("#### 統計分析報告預覽")
+        st.markdown(batch.statistical_report.markdown)
+        st.download_button(
+            "下載統計分析報告 Markdown", data=batch.statistical_report.markdown.encode("utf-8"),
+            file_name=batch.statistical_report.filename, mime="text/markdown", key="download_batch_statistical_report",
+        )
+        st.download_button(
+            "下載全部個別報告＋統計分析報告（ZIP）",
+            data=_batch_report_zip(batch),
+            file_name=batch.statistical_report.filename.removesuffix(".md") + ".zip",
+            mime="application/zip", key="download_batch_all_reports", icon=":material/folder_zip:",
+        )
+
+
+def _batch_report_zip(batch: QuickVideoReportBatchResult) -> bytes:
+    archive = BytesIO()
+    used_names: set[str] = set()
+    with ZipFile(archive, "w", compression=ZIP_DEFLATED) as bundle:
+        for item in batch.items:
+            if not item.result.is_available:
+                continue
+            name = item.result.filename
+            if name in used_names:
+                name = f"影片{item.index}-{name}"
+            used_names.add(name)
+            bundle.writestr(name, _research_report_preview_markdown(item.result.markdown))
+        if batch.statistical_report is not None:
+            bundle.writestr(batch.statistical_report.filename, batch.statistical_report.markdown)
+    return archive.getvalue()
+
+
+def _correction_rule_repository() -> ResearchCorrectionRuleRepository:
+    return ResearchCorrectionRuleRepository(sqlite_database_path())
+
+
+def _render_correction_rules_manager() -> None:
+    repository = _correction_rule_repository()
+    with st.expander("永久修正規則管理", expanded=False):
+        rules = repository.list_rules()
+        if not rules:
+            st.caption("尚未建立規則。可在個別報告的人工查核區確認並儲存。")
+            return
+        entity_labels = {
+            "taiwan_stock": "台灣上市／上櫃公司",
+            "foreign_stock": "外國股票",
+            "etf": "ETF",
+            "sector": "族群／主題",
+            "non_stock": "非股票（排除）",
+        }
+        for index, rule in enumerate(rules):
+            label = (
+                f"{'啟用' if rule.enabled else '停用'}｜{rule.raw_code} {rule.raw_name} → "
+                f"{entity_labels.get(rule.entity_type, rule.entity_type)} "
+                f"{rule.canonical_code} {rule.canonical_name}"
+            ).strip()
+            with st.container(border=True):
+                st.write(label)
+                st.caption(f"建立：{rule.created_at or '未記錄'}｜更新：{rule.updated_at or '未記錄'}")
+                control_a, control_b = st.columns(2)
+                if control_a.button("停用" if rule.enabled else "啟用", key=f"correction_rule_toggle_{index}"):
+                    repository.set_enabled(rule, not rule.enabled)
+                    _refresh_batch_after_rule_change(repository)
+                    st.rerun()
+                if control_b.button("刪除", key=f"correction_rule_delete_{index}"):
+                    repository.delete_rule(rule)
+                    _refresh_batch_after_rule_change(repository)
+                    st.rerun()
+
+
+def _refresh_batch_after_rule_change(repository: ResearchCorrectionRuleRepository) -> None:
+    batch = st.session_state.get("quick_video_report_batch_result")
+    if not isinstance(batch, QuickVideoReportBatchResult):
+        return
+    directory = TaiwanStockRepository(sqlite_database_path()).load_directory()
+    st.session_state["quick_video_report_batch_result"] = _apply_rules_to_batch(batch, repository, directory)
+
+
+def _refresh_quick_result_with_rules(
+    result: QuickVideoReportResult,
+    repository: ResearchCorrectionRuleRepository,
+    directory,
+) -> QuickVideoReportResult:
+    if result.research_result is None:
+        return result
+    report = apply_research_correction_rules(result.research_result.report, repository.list_rules(), directory)
+    markdown = render_research_report(report)
+    analysis_result = replace(result.research_result.analysis_result, report=report, markdown=markdown)
+    research_result = replace(result.research_result, report=report, markdown=markdown, analysis_result=analysis_result)
+    return replace(result, research_result=research_result)
+
+
+def _render_manual_review_panel(result: QuickVideoReportResult, *, batch_index: int) -> None:
+    if result.research_result is None:
+        return
+    report = result.research_result.report
+    pending = [
+        (index, issue)
+        for index, issue in enumerate(report.verification_issues)
+        if issue.status not in {"已查證", "已修正"}
+    ]
+    repository = _correction_rule_repository()
+    directory = TaiwanStockRepository(sqlite_database_path()).load_directory()
+    widget_prefix = f"manual_review_{batch_index}"
+    with st.expander("人工查核與永久修正規則", expanded=bool(pending)):
+        if pending:
+            st.caption("選定正確分類或官方公司後，畫面會立即更新；勾選永久規則則會套用到後續完全相同的原始寫法。")
+            by_index = dict(pending)
+            selected_index = st.selectbox(
+                "待查核項目",
+                options=[index for index, _issue in pending],
+                format_func=lambda index: f"{by_index[index].status}｜{by_index[index].target}｜{by_index[index].reference.display_locator() if by_index[index].reference else '未判定'}",
+                key=f"{widget_prefix}_issue_index",
+            )
+            issue = by_index[selected_index]
+            raw_code, raw_name = parse_issue_target(issue.target)
+            reference = issue.reference.display_locator() if issue.reference else "未判定"
+            st.info(f"{issue.claim}\n\n查核依據：{issue.evidence}\n\n原文位置：{reference}")
+            kind_by_label = {
+                "台灣上市／上櫃公司": "taiwan_stock",
+                "外國股票": "foreign_stock",
+                "ETF": "etf",
+                "族群／主題": "sector",
+                "非股票（排除）": "non_stock",
+            }
+            type_label = st.selectbox("正確分類", tuple(kind_by_label), key=f"{widget_prefix}_entity_type")
+            company_options = tuple(directory.companies) if directory else ()
+            selected_company = None
+            if kind_by_label[type_label] == "taiwan_stock":
+                if not company_options:
+                    st.warning("尚無本機官方公司清單，請先在進階模式同步。")
+                else:
+                    selected_company = st.selectbox(
+                        "官方公司清單中的正確公司",
+                        options=(None, *company_options),
+                        format_func=lambda company: "請明確選擇公司" if company is None else f"{company.code} {company.name}",
+                        key=f"{widget_prefix}_company_explicit",
+                    )
+            manual_code = ""
+            manual_name = ""
+            if kind_by_label[type_label] in {"foreign_stock", "etf"}:
+                item_kind = "Ticker／代號" if kind_by_label[type_label] == "foreign_stock" else "ETF 代號"
+                item_name = "公司名稱" if kind_by_label[type_label] == "foreign_stock" else "ETF 名稱"
+                manual_code = st.text_input(
+                    item_kind,
+                    value=raw_code,
+                    key=f"{widget_prefix}_manual_code_{selected_index}",
+                )
+                manual_name = st.text_input(
+                    item_name,
+                    value=raw_name,
+                    key=f"{widget_prefix}_manual_name_{selected_index}",
+                )
+            with st.form(f"{widget_prefix}_correction_form"):
+                remember = st.checkbox("儲存為永久規則（僅精確符合原始代號與名稱時套用）", value=True)
+                needs_manual_identity = kind_by_label[type_label] in {"foreign_stock", "etf"}
+                invalid_manual_identity = needs_manual_identity and not (manual_code.strip() and manual_name.strip())
+                apply_clicked = st.form_submit_button(
+                    "確認並更新報告",
+                    type="primary",
+                    disabled=(kind_by_label[type_label] == "taiwan_stock" and selected_company is None)
+                    or invalid_manual_identity,
+                )
+            if apply_clicked:
+                rule = ResearchCorrectionRule(
+                    raw_code=raw_code,
+                    raw_name=raw_name,
+                    entity_type=kind_by_label[type_label],
+                    canonical_code=selected_company.code if selected_company else manual_code.strip(),
+                    canonical_name=selected_company.name if selected_company else manual_name.strip(),
+                )
+                if remember:
+                    repository.save_rule(rule)
+                    batch = st.session_state.get("quick_video_report_batch_result")
+                    if isinstance(batch, QuickVideoReportBatchResult):
+                        st.session_state["quick_video_report_batch_result"] = _apply_rules_to_batch(batch, repository, directory)
+                else:
+                    updated_report = apply_research_correction_rules(report, (rule,), directory)
+                    markdown = render_research_report(updated_report)
+                    analysis = replace(result.research_result.analysis_result, report=updated_report, markdown=markdown)
+                    research = replace(result.research_result, report=updated_report, markdown=markdown, analysis_result=analysis)
+                    updated = replace(result, research_result=research)
+                    batch = st.session_state.get("quick_video_report_batch_result")
+                    if isinstance(batch, QuickVideoReportBatchResult):
+                        items = tuple(replace(item, result=updated) if item.index == batch_index else item for item in batch.items)
+                        st.session_state["quick_video_report_batch_result"] = _recompute_batch_aggregate(replace(batch, items=items), directory)
+                st.rerun()
+        else:
+            st.caption("目前沒有待查核項目。")
 
 
 def _run_quick_video_report(*, video_url: str, published_date: object, title: str) -> None:
@@ -310,7 +820,11 @@ def _run_quick_video_report(*, video_url: str, published_date: object, title: st
             st.warning("本機公司清單已超過一天未更新；本報告已使用最後成功同步版本查核。")
     else:
         status.update(label="摘要報告未完成", state="error", expanded=True)
-    st.session_state["quick_video_report_result"] = result
+    st.session_state["quick_video_report_result"] = _refresh_quick_result_with_rules(
+        result,
+        _correction_rule_repository(),
+        stock_directory,
+    )
 
 
 def _render_quick_report_timeline(slot, events: list[QuickReportProgressEvent]) -> None:
@@ -327,6 +841,11 @@ def _render_quick_report_timeline(slot, events: list[QuickReportProgressEvent]) 
     slot.text("\n".join(lines))
 
 
+def _research_report_preview_markdown(markdown: str) -> str:
+    """Hide the machine-readable import payload from the human-facing report preview."""
+    return re.sub(r"\n?<!-- PSIS_RESEARCH_REPORT_V1:[A-Za-z0-9_=-]+ -->\s*$", "", markdown).rstrip()
+
+
 def _render_quick_video_report_result(result: QuickVideoReportResult) -> None:
     if not result.is_available:
         st.error(result.error or "摘要報告未完成。")
@@ -334,7 +853,12 @@ def _render_quick_video_report_result(result: QuickVideoReportResult) -> None:
     st.success("摘要報告已完成，並已用本機公司清單查核股票代號與公司名稱。")
     st.caption(f"下載檔名：{result.filename}")
     st.markdown("#### 摘要報告 Markdown")
-    st.text_area("摘要報告 Markdown", value=result.markdown, height=520, key="quick_video_report_markdown")
+    st.text_area(
+        "摘要報告 Markdown",
+        value=_research_report_preview_markdown(result.markdown),
+        height=520,
+        key="quick_video_report_markdown",
+    )
     st.download_button(
         "下載 Markdown",
         data=result.markdown.encode("utf-8"),
@@ -349,7 +873,7 @@ def _render_advanced_research_source_analysis_page() -> None:
     st.caption("輸入逐字稿、PDF 或公開影片來源，產生固定格式研究報告。")
 
     st.markdown("### 1. 取得逐字稿")
-    st.caption("影片 URL 先轉成 ASR 逐字稿 JSON；成功後會自動帶到下一段。")
+    st.caption("YouTube 影片優先使用現成字幕；沒有可用字幕時才從音訊產生逐字稿，成功後會自動帶到下一段。")
     st.session_state.setdefault("research_asr_transcript_json_path", "")
     st.session_state.setdefault("research_asr_source_url", "")
     browser_asr_settings = get_default_browser_asr_settings()
@@ -488,7 +1012,7 @@ def _render_advanced_research_source_analysis_page() -> None:
                 _render_browser_asr_status(browser_asr_result)
                 _store_transcript_result(browser_asr_result, browser_page_url)
 
-    if transcribe_submitted and "browser_asr_result" in locals() and not browser_asr_result.media_result.is_available():
+    if transcribe_submitted and "browser_asr_result" in locals() and not browser_asr_result.is_available():
         media_candidates = _existing_media_candidates(output_stem)
         if media_candidates:
             st.warning("偵測到同名媒體檔，無須重新下載即可接續 WAV 與 ASR。")
@@ -657,6 +1181,7 @@ def _render_advanced_research_source_analysis_page() -> None:
                     model=analysis_model,
                     report_style=report_style,  # type: ignore[arg-type]
                 ),
+                youtube_client=_advanced_youtube_caption_client(title, publisher) if input_kind == "youtube_public" else None,
                 stock_directory=stock_directory,
             )
         except Exception as error:  # noqa: BLE001 - Streamlit page should show recoverable user input errors.
@@ -677,10 +1202,28 @@ def _render_advanced_research_source_analysis_page() -> None:
             for item in result.written_outputs:
                 st.success(f"{item.kind}：{item.path}")
         st.markdown("### 研究報告 Markdown")
-        st.text_area("研究報告 Markdown", value=result.markdown, height=520)
+        st.text_area(
+            "研究報告 Markdown",
+            value=_research_report_preview_markdown(result.markdown),
+            height=520,
+        )
         st.download_button(
             "下載 Markdown",
             data=result.markdown.encode("utf-8"),
             file_name=build_research_report_filename(result.report),
             mime="text/markdown",
         )
+
+
+def _advanced_youtube_caption_client(title: str, publisher: str) -> AvailableYouTubeCaptionClient:
+    settings = get_default_browser_asr_settings()
+    return AvailableYouTubeCaptionClient(
+        title=title, channel=publisher,
+        browser_config=SeleniumBrowserSessionConfig(
+            chrome_user_data_dir=Path(str(settings["chrome_user_data_dir"])),
+            chrome_binary_path=Path(str(settings["chrome_binary_path"])),
+            chromedriver_path=Path(str(settings["chromedriver_path"])),
+            headless=bool(settings["headless"]),
+            settle_seconds=float(settings["settle_seconds"]),
+        ),
+    )

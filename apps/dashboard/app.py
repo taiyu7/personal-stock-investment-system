@@ -7,7 +7,9 @@ from views.changelog import render_changelog_page
 from views.daily_review import render_daily_review_page
 from views.dashboard import render_dashboard_page
 from views.research_source_analysis import render_research_source_analysis_page
+from views.sqlite_database import render_sqlite_database_page
 from views.trade_concept import render_stock_concept_page
+from views.video_vlm_analysis import render_video_vlm_analysis_page
 
 
 APP_VERSION = "v0.10.0"
@@ -27,10 +29,14 @@ def main() -> None:
         render_dashboard_page()
     elif current_page == "影音生成摘要報告":
         render_research_source_analysis_page()
+    elif current_page == "投顧影片VLM 技術分析":
+        render_video_vlm_analysis_page()
     elif current_page == "每日復盤輸出":
         render_daily_review_page()
     elif current_page == "進銘的股價概念":
         render_stock_concept_page()
+    elif current_page == "SQLite 資料庫":
+        render_sqlite_database_page()
     else:
         render_changelog_page()
 
