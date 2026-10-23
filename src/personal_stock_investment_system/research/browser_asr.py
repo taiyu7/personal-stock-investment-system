@@ -6,6 +6,7 @@ import argparse
 from dataclasses import dataclass
 from dataclasses import replace
 from pathlib import Path
+from typing import Callable
 
 from personal_stock_investment_system.research.asr import (
     AsrTranscriptionResult,
@@ -34,6 +35,7 @@ from personal_stock_investment_system.research.sources import ResearchSourceImpo
 
 DEFAULT_OPENVINO_TRANSCRIPT_OUTPUT_DIR = Path("data/processed/asr-transcripts/openvino")
 DEFAULT_OPENAI_TRANSCRIPT_OUTPUT_DIR = Path("data/processed/asr-transcripts/openai")
+BrowserSessionAsrProgressCallback = Callable[[str, str, str], None]
 
 
 @dataclass(frozen=True)
@@ -89,6 +91,7 @@ def run_browser_session_asr_pipeline(
     downloader: MediaDownloadClient | None = None,
     preprocessor: AudioPreprocessor | None = None,
     speech_to_text: SpeechToTextClient | None = None,
+    on_progress: BrowserSessionAsrProgressCallback | None = None,
 ) -> BrowserSessionAsrResult:
     output_stem = source_input.output_stem or safe_filename(source_input.title or source_input.page_url)
     acquirer = BrowserSessionMediaAcquirer(
@@ -98,11 +101,19 @@ def run_browser_session_asr_pipeline(
         raw_output_dir=source_input.raw_output_dir,
         wav_output_dir=source_input.wav_output_dir,
     )
+    _emit_progress(on_progress, "media", "running", "正在取得影片媒體並轉換 ASR 音訊。")
     media_result = acquirer.acquire_for_asr(source_input.page_url, output_stem=output_stem)
     if not media_result.is_available() or media_result.artifact is None:
+        _emit_progress(on_progress, "media", "failed", media_result.status_message)
         return BrowserSessionAsrResult(media_result=media_result)
+    _emit_progress(on_progress, "media", "success", media_result.status_message)
 
-    return _transcribe_media_result(source_input, media_result, speech_to_text=speech_to_text)
+    return _transcribe_media_result(
+        source_input,
+        media_result,
+        speech_to_text=speech_to_text,
+        on_progress=on_progress,
+    )
 
 
 def run_existing_media_asr_pipeline(
@@ -161,6 +172,7 @@ def _transcribe_media_result(
     media_result: MediaAcquisitionResult,
     *,
     speech_to_text: SpeechToTextClient | None,
+    on_progress: BrowserSessionAsrProgressCallback | None = None,
 ) -> BrowserSessionAsrResult:
     if media_result.artifact is None:
         return BrowserSessionAsrResult(media_result=media_result)
@@ -169,7 +181,14 @@ def _transcribe_media_result(
     if transcriber is None:
         return BrowserSessionAsrResult(media_result=media_result)
 
+    _emit_progress(on_progress, "transcription", "running", "正在使用選定的 ASR provider 產生逐字稿。")
     transcription = transcriber.transcribe(media_result.artifact.path)
+    _emit_progress(
+        on_progress,
+        "transcription",
+        "success" if transcription.status == "available" else "failed",
+        transcription.status_message,
+    )
     source_import_result = build_local_audio_research_source(
         media_result.artifact.path,
         client=_FixedTranscriptionClient(transcription),
@@ -182,6 +201,16 @@ def _transcribe_media_result(
         transcription=transcription,
         source_import_result=source_import_result,
     )
+
+
+def _emit_progress(
+    callback: BrowserSessionAsrProgressCallback | None,
+    stage: str,
+    status: str,
+    message: str,
+) -> None:
+    if callback is not None:
+        callback(stage, status, message)
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -44,9 +44,9 @@ def test_recent_rows_returns_empty_when_required_price_columns_are_missing():
     assert rows.empty
 
 
-def test_research_source_analysis_is_available_from_sidebar_navigation():
-    assert "研究來源分析" in SIDEBAR_PAGES
-    assert SIDEBAR_PAGES.index("研究來源分析") == 1
+def test_video_summary_report_is_available_from_sidebar_navigation():
+    assert "影音生成摘要報告" in SIDEBAR_PAGES
+    assert SIDEBAR_PAGES.index("影音生成摘要報告") == 1
 
 
 def test_sidebar_uses_session_page_for_active_button(monkeypatch):
@@ -68,18 +68,18 @@ def test_sidebar_uses_session_page_for_active_button(monkeypatch):
 
     def fake_button(label, *, key, type, width, on_click, args):
         rendered_buttons.append((label, type))
-        if label == "研究來源分析":
+        if label == "影音生成摘要報告":
             on_click(*args)
         return False
 
     monkeypatch.setattr(layout.st, "sidebar", FakeSidebar())
     monkeypatch.setattr(layout.st, "button", fake_button)
-    monkeypatch.setattr(layout.st, "session_state", FakeSessionState(current_page="研究來源分析"))
+    monkeypatch.setattr(layout.st, "session_state", FakeSessionState(current_page="影音生成摘要報告"))
 
     selected_page = layout.render_sidebar("市場交易儀表板")
 
-    assert selected_page == "研究來源分析"
-    assert ("研究來源分析", "primary") in rendered_buttons
+    assert selected_page == "影音生成摘要報告"
+    assert ("影音生成摘要報告", "primary") in rendered_buttons
     assert ("市場交易儀表板", "secondary") in rendered_buttons
 
 

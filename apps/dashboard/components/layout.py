@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-SIDEBAR_PAGES = ("市場交易儀表板", "研究來源分析", "每日復盤輸出", "進銘的股價概念", "開發歷程")
+SIDEBAR_PAGES = ("市場交易儀表板", "影音生成摘要報告", "每日復盤輸出", "進銘的股價概念", "開發歷程")
 
 
 def render_global_styles() -> None:
@@ -76,6 +76,9 @@ def select_sidebar_page(page: str) -> None:
 
 def render_sidebar(current_page: str) -> str:
     selected_page = st.session_state.get("current_page", current_page)
+    if selected_page == "研究來源分析":
+        selected_page = "影音生成摘要報告"
+        st.session_state.current_page = selected_page
     if selected_page not in SIDEBAR_PAGES:
         selected_page = SIDEBAR_PAGES[0]
         st.session_state.current_page = selected_page

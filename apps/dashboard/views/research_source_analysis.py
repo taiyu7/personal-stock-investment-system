@@ -20,6 +20,11 @@ from personal_stock_investment_system.research import (
     build_research_report_filename,
     run_browser_session_asr_pipeline,
     run_existing_media_asr_pipeline,
+    QuickReportProgressEvent,
+    QuickVideoReportInput,
+    QuickVideoReportResult,
+    build_quick_video_report_filename,
+    run_quick_video_research_report,
     run_phase_one_research_source_analysis,
     sync_taiwan_stock_directory,
 )
@@ -73,6 +78,15 @@ WINDOWS_BROWSER_ASR_SETTINGS = {
     "headless": False,
     "yt_dlp_cookies_from_browser": r"chrome:C:\Users\taiyu\AppData\Local\psis-browser-asr-profile\Default",
 }
+
+QUICK_REPORT_TIMELINE_STEPS = (
+    ("validate", "驗證輸入與公司清單"),
+    ("media", "取得影片媒體並轉換 ASR 音訊"),
+    ("transcription", "OpenAI 產生逐字稿"),
+    ("analysis", "OpenAI 研究彙整"),
+    ("render", "查核股票身分並產生 Markdown"),
+    ("complete", "摘要報告完成"),
+)
 
 
 def get_default_browser_asr_settings() -> dict[str, str | float]:
@@ -185,7 +199,153 @@ def _store_transcript_result(result: BrowserSessionAsrResult, page_url: str) -> 
 
 
 def render_research_source_analysis_page() -> None:
-    st.subheader("研究來源分析")
+    st.subheader("影音生成摘要報告")
+    st.caption("快速模式只需三個欄位即可產生固定研究報告；進階模式保留原有完整設定。")
+    quick_tab, advanced_tab = st.tabs(("快速產生報告", "進階模式"))
+    with quick_tab:
+        _render_quick_video_report_page()
+    with advanced_tab:
+        _render_advanced_research_source_analysis_page()
+
+
+def _render_quick_video_report_page() -> None:
+    st.markdown("#### 快速產生報告")
+    st.caption("固定使用 OpenAI 逐字稿與 OpenAI 研究彙整，並強制以本機公司清單查核股票代號與公司名稱。")
+    st.session_state.setdefault("quick_video_report_result", None)
+
+    with st.form("quick_video_report_form", border=False):
+        video_url = st.text_input(
+            "影片連結",
+            placeholder="https://www.youtube.com/watch?v=...",
+            key="quick_video_report_url",
+        )
+        published_date = st.date_input(
+            "影片日期",
+            value=None,
+            format="YYYY-MM-DD",
+            key="quick_video_report_date",
+            help="必填。會用於報告來源資訊與下載檔名。",
+        )
+        title = st.text_input("影片名稱", key="quick_video_report_title")
+        submitted = st.form_submit_button("產生摘要報告", type="primary", icon=":material/auto_awesome:")
+
+    if submitted:
+        _run_quick_video_report(video_url=video_url, published_date=published_date, title=title)
+
+    result = st.session_state.get("quick_video_report_result")
+    if isinstance(result, QuickVideoReportResult):
+        _render_quick_video_report_result(result)
+
+
+def _run_quick_video_report(*, video_url: str, published_date: object, title: str) -> None:
+    st.session_state["quick_video_report_result"] = None
+    if published_date is None:
+        st.error("請選擇影片日期，格式固定為 YYYY-MM-DD。")
+        return
+    if not os.getenv("OPENAI_API_KEY"):
+        st.error("尚未設定 OPENAI_API_KEY，無法執行 OpenAI 逐字稿與研究彙整。")
+        return
+
+    request = QuickVideoReportInput(
+        video_url=video_url.strip(),
+        published_date=published_date,
+        title=title.strip(),
+    )
+    stock_repository = TaiwanStockRepository(sqlite_database_path())
+    stock_directory = stock_repository.load_directory()
+    latest_sync = stock_repository.latest_sync(status="success")
+    browser_settings = get_default_browser_asr_settings()
+    filename = build_quick_video_report_filename(request)
+    browser_input = build_browser_asr_input(
+        page_url=request.video_url,
+        output_stem=Path(filename).stem,
+        title=request.title,
+        asr_provider="openai",
+        chrome_user_data_dir=str(browser_settings["chrome_user_data_dir"]),
+        chrome_binary_path=str(browser_settings["chrome_binary_path"]),
+        chromedriver_path=str(browser_settings["chromedriver_path"]),
+        headless=bool(browser_settings["headless"]),
+        settle_seconds=float(browser_settings["settle_seconds"]),
+        playback_wait_seconds=float(browser_settings["playback_wait_seconds"]),
+        yt_dlp_cookies_from_browser=str(browser_settings["yt_dlp_cookies_from_browser"]),
+        yt_dlp_remote_components=str(browser_settings["yt_dlp_remote_components"]),
+        yt_dlp_download_page_url=True,
+        openvino_model_dir=str(browser_settings["openvino_model_dir"]),
+        openvino_device=str(browser_settings["openvino_device"]),
+        openai_transcription_model=os.getenv("OPENAI_AUDIO_TRANSCRIPTION_MODEL", DEFAULT_OPENAI_TRANSCRIPTION_MODEL),
+        openai_transcription_prompt=os.getenv("OPENAI_AUDIO_TRANSCRIPTION_PROMPT", ""),
+        openai_chunk_length_seconds=float(
+            os.getenv("OPENAI_AUDIO_CHUNK_LENGTH_SECONDS", DEFAULT_OPENAI_CHUNK_LENGTH_SECONDS)
+        ),
+        language=str(browser_settings["language"]),
+    )
+
+    timeline = st.container(border=True)
+    timeline.caption("處理進度")
+    timeline_slot = timeline.empty()
+    timeline_events: list[QuickReportProgressEvent] = []
+    _render_quick_report_timeline(timeline_slot, timeline_events)
+    status = st.status("準備產生摘要報告…", expanded=True)
+
+    def show_progress(event: QuickReportProgressEvent) -> None:
+        timeline_events.append(event)
+        _render_quick_report_timeline(timeline_slot, timeline_events)
+        marker = {"running": "▶", "success": "✓", "failed": "✕", "pending": "○"}[event.status]
+        detail = f"：{event.message}" if event.message else ""
+        status.write(f"{marker} {event.label}{detail}")
+        if event.status == "failed":
+            status.update(label=f"{event.label}失敗", state="error", expanded=True)
+        elif event.status == "running":
+            status.update(label=event.label, state="running", expanded=True)
+
+    result = run_quick_video_research_report(
+        request,
+        browser_input,
+        stock_directory=stock_directory,
+        progress_callback=show_progress,
+    )
+    if result.is_available:
+        status.update(label="摘要報告已完成", state="complete", expanded=True)
+        if latest_sync is not None and latest_sync.is_stale():
+            st.warning("本機公司清單已超過一天未更新；本報告已使用最後成功同步版本查核。")
+    else:
+        status.update(label="摘要報告未完成", state="error", expanded=True)
+    st.session_state["quick_video_report_result"] = result
+
+
+def _render_quick_report_timeline(slot, events: list[QuickReportProgressEvent]) -> None:
+    latest_status = {event.step_id: event.status for event in events}
+    lines: list[str] = []
+    for index, (step_id, label) in enumerate(QUICK_REPORT_TIMELINE_STEPS):
+        marker = {"pending": "○", "running": "▶", "success": "✓", "failed": "✕"}.get(
+            latest_status.get(step_id, "pending"),
+            "○",
+        )
+        lines.append(f"{marker} {label}")
+        if index < len(QUICK_REPORT_TIMELINE_STEPS) - 1:
+            lines.append("│")
+    slot.text("\n".join(lines))
+
+
+def _render_quick_video_report_result(result: QuickVideoReportResult) -> None:
+    if not result.is_available:
+        st.error(result.error or "摘要報告未完成。")
+        return
+    st.success("摘要報告已完成，並已用本機公司清單查核股票代號與公司名稱。")
+    st.caption(f"下載檔名：{result.filename}")
+    st.markdown("#### 摘要報告 Markdown")
+    st.text_area("摘要報告 Markdown", value=result.markdown, height=520, key="quick_video_report_markdown")
+    st.download_button(
+        "下載 Markdown",
+        data=result.markdown.encode("utf-8"),
+        file_name=result.filename,
+        mime="text/markdown",
+        icon=":material/download:",
+    )
+
+
+def _render_advanced_research_source_analysis_page() -> None:
+    st.markdown("#### 進階模式")
     st.caption("輸入逐字稿、PDF 或公開影片來源，產生固定格式研究報告。")
 
     st.markdown("### 1. 取得逐字稿")

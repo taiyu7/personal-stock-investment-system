@@ -25,7 +25,7 @@ def main() -> None:
     if current_page == "市場交易儀表板":
         render_page_header(APP_VERSION, APP_LAST_UPDATED)
         render_dashboard_page()
-    elif current_page == "研究來源分析":
+    elif current_page == "影音生成摘要報告":
         render_research_source_analysis_page()
     elif current_page == "每日復盤輸出":
         render_daily_review_page()

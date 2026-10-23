@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import date
 from pathlib import Path
-from typing import Literal
+from typing import Callable, Literal
 
 from personal_stock_investment_system.research.analysis_provider import (
     ResearchAnalysisClient,
@@ -30,6 +30,7 @@ from personal_stock_investment_system.research.youtube import (
 )
 
 ResearchInputKind = Literal["manual_text", "pdf", "youtube_public", "asr_transcript_json"]
+ResearchPipelineProgressCallback = Callable[[str, str, str], None]
 
 
 @dataclass(frozen=True)
@@ -81,6 +82,8 @@ def run_phase_one_research_source_analysis(
     analysis_client: ResearchAnalysisClient | None = None,
     stock_directory: TaiwanStockDirectory | None = None,
     report_date: date | None = None,
+    progress_callback: ResearchPipelineProgressCallback | None = None,
+    stop_on_analysis_failure: bool = False,
 ) -> PhaseOneResearchResult:
     statuses: list[str] = []
     import_result = _build_source_import_result(source_input, youtube_client=youtube_client)
@@ -88,21 +91,40 @@ def run_phase_one_research_source_analysis(
     statuses.append(import_result.status_message)
     if source_input.input_kind == "youtube_public" and import_result.status == "transcript_unavailable":
         statuses.append("未取得公開逐字稿，請手動貼上逐字稿或摘要後再分析。")
+    _emit_progress(progress_callback, "analysis", "running", "正在使用研究彙整 provider 分析逐字稿。")
     analysis_result = analyze_research_source_with_provider(
         source,
         settings=analysis_settings,
         client=analysis_client,
     )
+    _emit_progress(
+        progress_callback,
+        "analysis",
+        "success" if analysis_result.is_available() else "failed",
+        analysis_result.status_message,
+    )
     report = analysis_result.report
     statuses.append(analysis_result.status_message)
+    if stop_on_analysis_failure and not analysis_result.is_available():
+        statuses.append("研究彙整未完成，未進行股票身分查核、報告輸出或本機寫檔。")
+        return PhaseOneResearchResult(
+            source=source,
+            report=report,
+            markdown=analysis_result.markdown or render_research_report(report),
+            import_result=import_result,
+            analysis_result=analysis_result,
+            statuses=tuple(statuses),
+        )
     report_style = (analysis_settings or ResearchAnalysisSettings()).report_style
     if stock_directory is not None and report_style == "structured_report":
+        _emit_progress(progress_callback, "stock_validation", "running", "正在查核股票代號與公司名稱並產生 Markdown。")
         report = verify_research_report_stock_mentions(report, stock_directory)
         markdown = render_research_report(report)
         analysis_result = replace(analysis_result, report=report, markdown=markdown)
         statuses.append(
             f"已用官方上市／上櫃公司清單查核股票代號與公司名稱（{len(stock_directory.companies)} 筆）。"
         )
+        _emit_progress(progress_callback, "stock_validation", "success", statuses[-1])
     else:
         markdown = analysis_result.markdown or render_research_report(report)
     written_outputs = write_research_report_outputs(
@@ -124,6 +146,16 @@ def run_phase_one_research_source_analysis(
         written_outputs=written_outputs,
         statuses=tuple(statuses),
     )
+
+
+def _emit_progress(
+    callback: ResearchPipelineProgressCallback | None,
+    stage: str,
+    status: str,
+    message: str,
+) -> None:
+    if callback is not None:
+        callback(stage, status, message)
 
 
 def _build_source_import_result(

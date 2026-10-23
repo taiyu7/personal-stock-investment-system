@@ -99,6 +99,31 @@ def test_browser_session_asr_pipeline_can_build_research_source_after_transcript
     assert speech_to_text.audio_path == (tmp_path / "wav" / "episode-1-16k-mono.wav").resolve()
 
 
+def test_browser_session_asr_pipeline_reports_media_and_transcription_progress(tmp_path):
+    events = []
+
+    run_browser_session_asr_pipeline(
+        BrowserSessionAsrInput(
+            page_url="https://example.test/member-video",
+            output_stem="episode-1",
+            raw_output_dir=tmp_path / "raw",
+            wav_output_dir=tmp_path / "wav",
+        ),
+        discovery=FakeDiscovery(),
+        downloader=FakeDownloader(),
+        preprocessor=FakePreprocessor(),
+        speech_to_text=FakeSpeechToText(),
+        on_progress=lambda stage, status, message: events.append((stage, status, message)),
+    )
+
+    assert [(stage, status) for stage, status, _ in events] == [
+        ("media", "running"),
+        ("media", "success"),
+        ("transcription", "running"),
+        ("transcription", "success"),
+    ]
+
+
 def test_existing_media_can_continue_to_asr_without_downloading_again(tmp_path):
     class ReusePreprocessor:
         def to_asr_wav(self, artifact: MediaArtifact, output_path: Path) -> MediaArtifact:

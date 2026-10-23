@@ -37,10 +37,20 @@ from personal_stock_investment_system.research.asr import (
     load_asr_transcription_result,
 )
 from personal_stock_investment_system.research.browser_asr import (
+    BrowserSessionAsrProgressCallback,
     BrowserSessionAsrInput,
     BrowserSessionAsrResult,
     run_existing_media_asr_pipeline,
     run_browser_session_asr_pipeline,
+)
+from personal_stock_investment_system.research.quick_video_report import (
+    QuickReportProgressEvent,
+    QuickReportProgressCallback,
+    QuickReportStepStatus,
+    QuickVideoReportInput,
+    QuickVideoReportResult,
+    build_quick_video_report_filename,
+    run_quick_video_research_report,
 )
 from personal_stock_investment_system.research.entrypoint import (
     PhaseOneResearchInput,
@@ -214,6 +224,7 @@ __all__ = [
     "BreezeAsrCliTranscriber",
     "BrowserSessionAsrInput",
     "BrowserSessionAsrResult",
+    "BrowserSessionAsrProgressCallback",
     "OpenAIAsrConfig",
     "OpenAIAsrTranscriber",
     "OpenAIAudioTranscriptionsClient",
@@ -244,6 +255,11 @@ __all__ = [
     "PhaseOneResearchResult",
     "ResearchReportOutputDestination",
     "ResearchReportOutputSettings",
+    "QuickReportProgressEvent",
+    "QuickReportProgressCallback",
+    "QuickReportStepStatus",
+    "QuickVideoReportInput",
+    "QuickVideoReportResult",
     "SpeechToTextClient",
     "TranscriptUnavailableYouTubeClient",
     "WrittenResearchReport",
@@ -253,6 +269,7 @@ __all__ = [
     "build_research_analysis_client",
     "build_vlm_client",
     "build_research_report_filename",
+    "build_quick_video_report_filename",
     "build_local_audio_research_source",
     "build_transcript_json_research_source",
     "build_pdf_research_source",
@@ -273,6 +290,7 @@ __all__ = [
     "run_browser_session_asr_pipeline",
     "run_existing_media_asr_pipeline",
     "run_phase_one_research_source_analysis",
+    "run_quick_video_research_report",
     "run_video_research_report_pipeline",
     "select_downloadable_media_request",
     "select_stream_manifest",
