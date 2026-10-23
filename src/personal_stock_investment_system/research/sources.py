@@ -139,6 +139,18 @@ class VerificationIssue:
 
 
 @dataclass(frozen=True)
+class EntityClassification:
+    raw_code: str
+    raw_name: str
+    entity_type: str
+    canonical_code: str = ""
+    canonical_name: str = ""
+    evidence: str = ""
+    source_locator: str = "未判定"
+    created_at: str = field(default_factory=current_collected_at)
+
+
+@dataclass(frozen=True)
 class VerifiableHypothesis:
     hypothesis: str
     required_data: str = "待查證"
@@ -160,3 +172,4 @@ class ResearchReport:
     risks_and_counterexamples: tuple[str, ...] = ()
     open_questions: tuple[str, ...] = ()
     next_actions: tuple[str, ...] = ()
+    entity_classifications: tuple[EntityClassification, ...] = ()

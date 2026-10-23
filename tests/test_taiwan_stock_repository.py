@@ -15,7 +15,12 @@ def test_migrations_create_and_track_current_schema(tmp_path):
     first = run_sqlite_migrations(database_path)
     second = run_sqlite_migrations(database_path)
 
-    assert first == ("0001_create_daily_reviews", "0002_create_taiwan_stock_reference")
+    assert first == (
+        "0001_create_daily_reviews",
+        "0002_create_taiwan_stock_reference",
+        "0003_create_research_correction_rules",
+        "0004_allow_etf_correction_rules",
+    )
     assert second == ()
     with sqlite3.connect(database_path) as connection:
         tables = {
@@ -25,6 +30,7 @@ def test_migrations_create_and_track_current_schema(tmp_path):
     assert "daily_reviews" in tables
     assert "taiwan_listed_companies" in tables
     assert "reference_data_sync_runs" in tables
+    assert "research_correction_rules" in tables
     assert "schema_migrations" in tables
 
 
