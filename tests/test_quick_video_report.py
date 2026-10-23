@@ -52,6 +52,36 @@ def test_quick_video_report_filename_uses_input_date_and_title():
     assert build_quick_video_report_filename(request) == "20261023-股市情報局-摘要報告.md"
 
 
+def test_batch_generates_statistical_report_after_one_success(monkeypatch):
+    from types import SimpleNamespace
+
+    import personal_stock_investment_system.research.quick_video_report as quick_video_report
+    from personal_stock_investment_system.research.sources import ResearchReport, ResearchSource
+    from personal_stock_investment_system.research.statistical_report import StatisticalReportResult
+
+    request = _request()
+    browser_input = BrowserSessionAsrInput(page_url=request.video_url, asr_provider="openai")
+    report = ResearchReport(ResearchSource("youtube_public", request.title, "逐字稿"))
+    expected = StatisticalReportResult("# 統計", "single.md", "openai", "test")
+    received = []
+    monkeypatch.setattr(
+        quick_video_report, "run_quick_video_research_report",
+        lambda *args, **kwargs: SimpleNamespace(is_available=True, research_result=SimpleNamespace(report=report)),
+    )
+    monkeypatch.setattr(
+        quick_video_report, "generate_statistical_report",
+        lambda reports, directory: received.append(reports) or expected,
+    )
+
+    batch = quick_video_report.run_quick_video_report_batch(
+        ((1, request, browser_input),), stock_directory=_directory()
+    )
+
+    assert batch.success_count == 1
+    assert batch.statistical_report == expected
+    assert received == [(report,)]
+
+
 def test_quick_video_report_runs_openai_pipeline_without_writing_local_report(tmp_path):
     transcript_path = _write_transcript(tmp_path)
     events = []

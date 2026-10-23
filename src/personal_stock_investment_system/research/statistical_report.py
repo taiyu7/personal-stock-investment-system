@@ -108,8 +108,8 @@ def generate_statistical_report(
     client: ResponsesClient | None = None,
     report_date: date | None = None,
 ) -> StatisticalReportResult:
-    if len(reports) < 2:
-        raise ValueError("請至少選取兩份固定研究報告。")
+    if not reports:
+        raise ValueError("請至少選取一份固定研究報告。")
     consensus = build_stock_consensus(reports, directory)
     bearish = build_stock_consensus(reports, directory, direction="偏空")
     ranked = consensus[:10]
@@ -166,7 +166,7 @@ def _generate_narratives(
     response = client.responses.create(
         model=model,
         instructions=(
-            "你只負責將輸入的多份研究報告證據合併成繁體中文看多原因與技術防守摘要。"
+            "你只負責將輸入的一份或多份研究報告證據合併成繁體中文看多原因與技術防守摘要。"
             "禁止使用外部知識、網路搜尋或推測；只能改寫 evidence 欄位已提供的內容。"
             "每個原因與防守摘要都必須附上對應 evidence id，格式為〔E0001〕。"
             "若技術防守資料不足，明確寫『來源未提供足夠技術防守依據』，不可自行建議均線、價位或操作。"

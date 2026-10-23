@@ -96,7 +96,7 @@ WINDOWS_BROWSER_ASR_SETTINGS = {
 
 QUICK_REPORT_TIMELINE_STEPS = (
     ("validate", "驗證輸入與公司清單"),
-    ("captions", "檢查影片現成字幕"),
+    ("captions", "檢查繁體或簡體中文字幕"),
     ("media", "取得影片媒體並轉換 ASR 音訊"),
     ("transcription", "音訊轉錄（無可用字幕時）"),
     ("analysis", "OpenAI 研究彙整"),
@@ -232,9 +232,9 @@ def render_research_source_analysis_page() -> None:
 
 def _render_statistical_report_page() -> None:
     st.markdown("#### 產生統計分析報告")
-    st.caption("選取至少兩份固定研究報告 Markdown；股票排名與三項計數由程式計算，OpenAI 只負責依附證據整合文字。")
+    st.caption("選取至少一份固定研究報告 Markdown；同一份報告中的不同講者也會分別計數。股票排名與三項計數由程式計算，OpenAI 只負責依附證據整合文字。")
     files = st.file_uploader(
-        "選取多份固定研究報告 Markdown",
+        "選取固定研究報告 Markdown（可多選）",
         type=("md",),
         accept_multiple_files=True,
         key="statistical_report_uploads",
@@ -246,8 +246,8 @@ def _render_statistical_report_page() -> None:
     if st.button("產生統計分析報告", type="primary", icon=":material/analytics:", key="generate_statistical_report"):
         try:
             reports = tuple(parse_research_report_markdown(file.getvalue().decode("utf-8")) for file in files or ())
-            if len(reports) < 2:
-                raise ValueError("請至少選取兩份固定研究報告。")
+            if not reports:
+                raise ValueError("請至少選取一份固定研究報告。")
             if not os.getenv("OPENAI_API_KEY"):
                 raise ValueError("尚未設定 OPENAI_API_KEY，無法產生統計分析報告。")
             directory = TaiwanStockRepository(sqlite_database_path()).load_directory()
@@ -278,8 +278,8 @@ def _render_statistical_report_page() -> None:
 
 def _render_quick_video_report_page() -> None:
     st.markdown("#### 快速產生報告")
-    st.caption("優先使用 YouTube 現成字幕；沒有可用字幕時使用 OpenAI 音訊轉錄。研究彙整固定使用 OpenAI，並以本機公司清單查核股票身分。")
-    count = st.number_input("本次影片數", min_value=1, max_value=10, value=2, step=1, key="quick_video_batch_count")
+    st.caption("優先使用 YouTube zh-TW 字幕；沒有時使用簡體中文字幕並轉為繁體。兩者都沒有才使用 OpenAI 音訊轉錄。研究彙整固定使用 OpenAI，並以本機公司清單查核股票身分。")
+    count = st.number_input("本次影片數", min_value=1, max_value=10, value=1, step=1, key="quick_video_batch_count")
     st.session_state.setdefault("quick_video_report_batch_result", None)
     with st.form("quick_video_report_batch_form", border=False):
         entries = []
@@ -367,7 +367,7 @@ def _run_quick_video_report_batch(entries) -> None:
             retained.append(old)
         else:
             pending.append((index, request, browser_input))
-    if not pending and len(retained) < 2:
+    if not pending and not retained:
         st.session_state["quick_video_report_batch_result"] = QuickVideoReportBatchResult(tuple(retained), tuple(invalid))
         return
     _launch_quick_batch_job(
@@ -490,7 +490,7 @@ def _apply_rules_to_batch(
         item.result.research_result.report for item in items
         if item.result.is_available and item.result.research_result is not None
     )
-    if len(reports) >= 2 and directory is not None:
+    if reports and directory is not None:
         try:
             return replace(refreshed, statistical_report=generate_statistical_report(reports, directory))
         except Exception as error:  # noqa: BLE001 - keep every completed per-video report available.
@@ -503,7 +503,7 @@ def _recompute_batch_aggregate(batch: QuickVideoReportBatchResult, directory) ->
         item.result.research_result.report for item in batch.items
         if item.result.is_available and item.result.research_result is not None
     )
-    if len(reports) < 2 or directory is None:
+    if not reports or directory is None:
         return replace(batch, statistical_report=None, aggregation_error="")
     try:
         return replace(batch, statistical_report=generate_statistical_report(reports, directory), aggregation_error="")
@@ -537,8 +537,6 @@ def _render_quick_video_report_batch_result(batch: QuickVideoReportBatchResult) 
                 False,
             )
             st.rerun()
-    if batch.success_count and batch.success_count < 2:
-        st.info("個別報告已保留；至少兩份成功報告才能產生統計分析報告。")
     if batch.aggregation_error:
         st.error(f"統計分析報告未完成，但個別報告仍可使用：{batch.aggregation_error}")
     for item in batch.items:
@@ -873,7 +871,7 @@ def _render_advanced_research_source_analysis_page() -> None:
     st.caption("輸入逐字稿、PDF 或公開影片來源，產生固定格式研究報告。")
 
     st.markdown("### 1. 取得逐字稿")
-    st.caption("YouTube 影片優先使用現成字幕；沒有可用字幕時才從音訊產生逐字稿，成功後會自動帶到下一段。")
+    st.caption("YouTube 影片優先使用 zh-TW 字幕，其次使用簡體字幕並轉為繁體；兩者都沒有時才從音訊產生逐字稿。")
     st.session_state.setdefault("research_asr_transcript_json_path", "")
     st.session_state.setdefault("research_asr_source_url", "")
     browser_asr_settings = get_default_browser_asr_settings()

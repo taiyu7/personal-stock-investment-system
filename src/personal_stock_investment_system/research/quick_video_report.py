@@ -254,12 +254,12 @@ def run_quick_video_report_batch(
     )
     aggregate = None
     aggregation_error = ""
-    if generate_aggregate and len(successful_reports) >= 2 and stock_directory is not None:
+    if generate_aggregate and successful_reports and stock_directory is not None:
         try:
             aggregate = generate_statistical_report(successful_reports, stock_directory)
         except Exception as error:  # noqa: BLE001 - individual reports remain usable if aggregation fails.
             aggregation_error = str(error)
-    elif generate_aggregate and len(successful_reports) >= 2:
+    elif generate_aggregate and successful_reports:
         aggregation_error = "本機沒有可用公司清單，無法產生統計分析報告。"
     return QuickVideoReportBatchResult(tuple(finished), invalid_items, aggregate, aggregation_error)
 

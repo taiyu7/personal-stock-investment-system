@@ -95,7 +95,7 @@ def run_video_batch_job(
             item.result.research_result.report for item in batch.items
             if item.result.is_available and item.result.research_result is not None
         )
-        if len(reports) >= 2 and directory is not None:
+        if reports and directory is not None:
             try:
                 batch = replace(batch, statistical_report=generate_statistical_report(reports, directory))
             except Exception as error:  # noqa: BLE001 - individual reports remain downloadable.
